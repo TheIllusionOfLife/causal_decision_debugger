@@ -58,8 +58,7 @@ def placebo_outcome_test(
         "name": "placebo_outcome",
         "status": status,
         "details": (
-            f"Effect on placebo outcome '{placebo_outcome}' = {effect:+.4f}; "
-            "should be near zero."
+            f"Effect on placebo outcome '{placebo_outcome}' = {effect:+.4f}; should be near zero."
         ),
         "delta_vs_main_estimate": float(effect - main_estimate),
     }

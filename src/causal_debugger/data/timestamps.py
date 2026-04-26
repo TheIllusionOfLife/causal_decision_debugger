@@ -68,9 +68,7 @@ def check_timestamps_file(
     out_path: Path | None = None,
 ) -> dict[str, Any]:
     df = _read(Path(path))
-    payload = check_timestamps(
-        df, treatment_time_col, outcome_time_col, unit_id_col=unit_id_col
-    )
+    payload = check_timestamps(df, treatment_time_col, outcome_time_col, unit_id_col=unit_id_col)
     if out_path is not None:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)

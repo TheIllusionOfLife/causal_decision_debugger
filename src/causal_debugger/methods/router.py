@@ -16,9 +16,9 @@ import yaml
 class RouterContext:
     randomized: bool = False
     has_pre_period: bool = False
-    rollout_pattern: Literal[
-        "single", "staggered", "single_unit", "aggregate_time_series"
-    ] = "single"
+    rollout_pattern: Literal["single", "staggered", "single_unit", "aggregate_time_series"] = (
+        "single"
+    )
     threshold_assignment: bool = False
     has_donor_pool: bool = False
     has_instrument: bool = False

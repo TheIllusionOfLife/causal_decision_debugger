@@ -39,9 +39,7 @@ def test_post_treatment_variable_in_covariates_is_rejected() -> None:
     spec = _load_example()
     spec["variables"]["pre_treatment_covariates"].append("tutorial_completed")
     errors = validate_spec(spec)
-    assert any(
-        "tutorial_completed" in e.message and "post_treatment" in e.message for e in errors
-    )
+    assert any("tutorial_completed" in e.message and "post_treatment" in e.message for e in errors)
 
 
 def test_invalid_status_enum_is_rejected() -> None:

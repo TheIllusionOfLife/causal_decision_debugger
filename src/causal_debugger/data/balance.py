@@ -41,9 +41,7 @@ def _smd_categorical(series: pd.Series, treated_mask: pd.Series) -> float:
     return max(smd_per_cat) if smd_per_cat else 0.0
 
 
-def _covariate_summary(
-    df: pd.DataFrame, col: str, treated_mask: pd.Series
-) -> dict[str, Any]:
+def _covariate_summary(df: pd.DataFrame, col: str, treated_mask: pd.Series) -> dict[str, Any]:
     series = df[col]
     if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series):
         smd = _smd_numeric(series, treated_mask)

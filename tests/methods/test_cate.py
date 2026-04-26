@@ -17,7 +17,12 @@ def _heterogeneous(seed: int = 0, n: int = 5_000) -> pd.DataFrame:
     p = np.clip(base + effect_by_segment * treated, 0.01, 0.99)
     outcome = rng.binomial(1, p)
     return pd.DataFrame(
-        {"treated": treated, "outcome": outcome, "segment": segment, "covariate": rng.normal(0, 1, n)}
+        {
+            "treated": treated,
+            "outcome": outcome,
+            "segment": segment,
+            "covariate": rng.normal(0, 1, n),
+        }
     )
 
 

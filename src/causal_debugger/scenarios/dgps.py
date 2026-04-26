@@ -247,14 +247,7 @@ def simultaneous_launch(
             post = t >= treat_period
             d = 1 if (is_treated_unit[u] and post) else 0
             extra = extra_launch_effect if post else 0.0
-            y = (
-                0.30
-                + unit_fe[u]
-                + period_fe[t]
-                + extra
-                + true_ate * d
-                + rng.normal(0, 0.02)
-            )
+            y = 0.30 + unit_fe[u] + period_fe[t] + extra + true_ate * d + rng.normal(0, 0.02)
             rows.append((u, t, int(is_treated_unit[u]), int(post), int(d), float(y)))
     df = pd.DataFrame(rows, columns=["unit_id", "period", "group", "post", "treated", "outcome"])
     return Scenario(

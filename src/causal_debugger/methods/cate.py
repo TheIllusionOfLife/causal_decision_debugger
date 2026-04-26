@@ -37,12 +37,16 @@ def estimate_cate(
     t = df[treatment].astype(int).values
     y = df[outcome].astype(float).values
 
-    mu1 = GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0).fit(
-        x[t == 1], y[t == 1]
-    ).predict(x)
-    mu0 = GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0).fit(
-        x[t == 0], y[t == 0]
-    ).predict(x)
+    mu1 = (
+        GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0)
+        .fit(x[t == 1], y[t == 1])
+        .predict(x)
+    )
+    mu0 = (
+        GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0)
+        .fit(x[t == 0], y[t == 0])
+        .predict(x)
+    )
     cate = mu1 - mu0
     ate = float(np.mean(cate))
     se = float(np.std(cate, ddof=1) / np.sqrt(len(cate)))

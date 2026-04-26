@@ -18,9 +18,7 @@ def e_value(risk_ratio: float) -> float:
     return float(inv + math.sqrt(inv * (inv - 1.0)))
 
 
-def _approximate_risk_ratio(
-    effect: float, baseline_outcome_rate: float
-) -> float:
+def _approximate_risk_ratio(effect: float, baseline_outcome_rate: float) -> float:
     p0 = max(min(baseline_outcome_rate, 0.999), 1e-3)
     p1 = max(min(p0 + effect, 0.999), 1e-3)
     return p1 / p0

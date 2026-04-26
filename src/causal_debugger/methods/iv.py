@@ -41,8 +41,7 @@ def estimate_iv(
         "first_stage_F": {
             "status": f_status,
             "details": (
-                f"Cragg-Donald F = {f_stat:.2f} "
-                f"(threshold for weak instrument: {weak_threshold})"
+                f"Cragg-Donald F = {f_stat:.2f} (threshold for weak instrument: {weak_threshold})"
             ),
         }
     }

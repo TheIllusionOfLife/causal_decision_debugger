@@ -30,9 +30,7 @@ def estimate_its(
     ci_low, ci_high = (float(c) for c in model.conf_int()[2])
     pre_resid = y[post == 0] - model.predict(design[post == 0])
     autocorr = (
-        float(np.corrcoef(pre_resid[:-1], pre_resid[1:])[0, 1])
-        if len(pre_resid) > 2
-        else 0.0
+        float(np.corrcoef(pre_resid[:-1], pre_resid[1:])[0, 1]) if len(pre_resid) > 2 else 0.0
     )
     diagnostics = {
         "pre_period_fit": {

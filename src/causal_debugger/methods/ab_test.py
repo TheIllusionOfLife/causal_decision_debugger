@@ -68,9 +68,7 @@ def estimate_ab(
 ) -> dict[str, Any]:
     if covariates:
         method = "regression_adjustment"
-        out = _regression_adjusted(
-            df, treatment=treatment, outcome=outcome, covariates=covariates
-        )
+        out = _regression_adjusted(df, treatment=treatment, outcome=outcome, covariates=covariates)
     else:
         method = "ab_test_analysis"
         out = _diff_in_means(df, treatment=treatment, outcome=outcome)

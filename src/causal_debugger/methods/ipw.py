@@ -16,9 +16,7 @@ def _design_matrix(df: pd.DataFrame, covariates: Sequence[str]) -> np.ndarray:
     return StandardScaler(with_mean=False).fit_transform(encoded.values)
 
 
-def _propensity(
-    df: pd.DataFrame, treatment: str, covariates: Sequence[str]
-) -> np.ndarray:
+def _propensity(df: pd.DataFrame, treatment: str, covariates: Sequence[str]) -> np.ndarray:
     x = _design_matrix(df, covariates)
     y = df[treatment].astype(int).values
     model = LogisticRegression(max_iter=500, solver="lbfgs", C=1.0)
@@ -56,9 +54,7 @@ def estimate_ipw(
     diagnostics = {
         "propensity_overlap": {
             "status": overlap_status,
-            "details": (
-                f"Share of units with PS in [0,0.05] or [0.95,1]: {overlap_violation:.3f}"
-            ),
+            "details": (f"Share of units with PS in [0,0.05] or [0.95,1]: {overlap_violation:.3f}"),
         }
     }
     confidence = "medium"

@@ -78,7 +78,9 @@ def render_report(ctx: dict[str, Any]) -> str:
     outcome = causal_q.get("outcome", {})
     business = spec.get("business_decision", {})
 
-    parts: list[str] = [f"# {ctx.get('analysis_id', spec.get('analysis_id', 'analysis'))} — Causal Decision Report\n"]
+    parts: list[str] = [
+        f"# {ctx.get('analysis_id', spec.get('analysis_id', 'analysis'))} — Causal Decision Report\n"
+    ]
 
     if failure is not None:
         parts.append(_identifiability_section(failure))
@@ -88,17 +90,30 @@ def render_report(ctx: dict[str, Any]) -> str:
         parts.append(f"- **Treatment:** {treatment.get('name', '')}")
         parts.append(f"- **Outcome:** {outcome.get('name', '')}")
         parts.append(f"- **Comparison group:** {causal_q.get('comparison_group', '')}\n")
-        parts.append("## Data Used\n\n" + (spec.get("data", {}).get("local_path") or "see causal_spec.yaml"))
+        parts.append(
+            "## Data Used\n\n" + (spec.get("data", {}).get("local_path") or "see causal_spec.yaml")
+        )
         parts.append("## Method Summary\n")
-        parts.append(f"- **Identifiability:** `{plan.get('identifiability_status', 'not_identifiable')}`")
+        parts.append(
+            f"- **Identifiability:** `{plan.get('identifiability_status', 'not_identifiable')}`"
+        )
         parts.append(f"- **Reasoning:** {plan.get('reasoning_summary', '')}\n")
         parts.append("## Main Result\n\nNot identifiable with current data.\n")
         parts.append("## Confidence Level\n\n**not_identifiable** — see reasons above.\n")
-        parts.append("## Assumption Ledger Summary\n\n" + _format_assumptions(ctx.get("assumption_ledger")))
-        parts.append("\n## Robustness and Refutation Checks\n\n_Skipped: no estimate was produced._")
+        parts.append(
+            "## Assumption Ledger Summary\n\n" + _format_assumptions(ctx.get("assumption_ledger"))
+        )
+        parts.append(
+            "\n## Robustness and Refutation Checks\n\n_Skipped: no estimate was produced._"
+        )
         parts.append("\n## Limitations\n\nThe current data cannot identify the causal effect.")
-        parts.append("\n## Recommended Decision\n\nDo not declare causal impact. Run the recommended next action.")
-        parts.append("\n## Recommended Next Experiment or Data Collection\n\n" + failure["recommended_next_action"])
+        parts.append(
+            "\n## Recommended Decision\n\nDo not declare causal impact. Run the recommended next action."
+        )
+        parts.append(
+            "\n## Recommended Next Experiment or Data Collection\n\n"
+            + failure["recommended_next_action"]
+        )
         parts.append("\n## Technical Appendix\n\nSee `technical_appendix.md`.\n")
         return "\n".join(parts)
 
@@ -107,9 +122,7 @@ def render_report(ctx: dict[str, Any]) -> str:
 
     parts.append("## Executive Summary\n")
     parts.append(estimate.get("interpretation", "(no interpretation supplied)"))
-    parts.append(
-        f"\n**Confidence:** {estimate['confidence_level']}.\n"
-    )
+    parts.append(f"\n**Confidence:** {estimate['confidence_level']}.\n")
 
     parts.append("## Decision Context\n\n" + business.get("question", ""))
     parts.append("\n## Causal Question\n")
@@ -149,8 +162,12 @@ def render_report(ctx: dict[str, Any]) -> str:
         + _confidence_rationale(estimate, plan)
     )
 
-    parts.append("\n## Assumption Ledger Summary\n\n" + _format_assumptions(ctx.get("assumption_ledger")))
-    parts.append("\n## Robustness and Refutation Checks\n\n" + _format_refutation(ctx.get("refutation")))
+    parts.append(
+        "\n## Assumption Ledger Summary\n\n" + _format_assumptions(ctx.get("assumption_ledger"))
+    )
+    parts.append(
+        "\n## Robustness and Refutation Checks\n\n" + _format_refutation(ctx.get("refutation"))
+    )
 
     limitations = ctx.get("limitations") or (
         "Treatment was not confirmed randomized; unobserved confounding may remain. "
