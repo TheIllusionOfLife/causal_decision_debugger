@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causal-debugger/schemas/assumption_ledger.schema.json",
+  "title": "Assumption Ledger",
+  "type": "object",
+  "required": ["assumptions"],
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status", "importance"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "status": {
+            "enum": ["confirmed", "plausible", "uncertain", "weak", "violated", "unknown"]
+          },
+          "importance": { "enum": ["low", "medium", "high", "critical"] },
+          "evidence": { "type": "string" },
+          "risk_if_false": { "type": "string" },
+          "how_to_check_or_improve": { "type": "string" }
+        }
+      }
+    }
+  }
+}

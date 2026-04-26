@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causal-debugger/schemas/estimate_result.schema.json",
+  "title": "Estimate Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "method",
+    "estimand",
+    "effect_size",
+    "effect_unit",
+    "confidence_interval",
+    "sample_size",
+    "treated_units",
+    "control_units",
+    "confidence_level",
+    "diagnostics",
+    "interpretation"
+  ],
+  "properties": {
+    "method": { "type": "string", "minLength": 1 },
+    "estimand": { "enum": ["ATE", "ATT", "ATC", "LATE", "CATE", "ITT"] },
+    "effect_size": { "type": "number" },
+    "effect_unit": { "type": "string" },
+    "confidence_interval": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number" }
+    },
+    "p_value": { "type": ["number", "null"] },
+    "sample_size": { "type": "integer", "minimum": 0 },
+    "treated_units": { "type": "integer", "minimum": 0 },
+    "control_units": { "type": "integer", "minimum": 0 },
+    "confidence_level": { "enum": ["high", "medium", "low", "not_identifiable"] },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "details"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "enum": ["passed", "warning", "failed"] },
+          "details": { "type": "string" }
+        }
+      }
+    },
+    "interpretation": { "type": "string" }
+  }
+}

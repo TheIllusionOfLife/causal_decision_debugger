@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causal-debugger/schemas/causal_spec.schema.json",
+  "title": "Causal Spec",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "analysis_id",
+    "status",
+    "business_decision",
+    "causal_question",
+    "population",
+    "variables",
+    "assumptions"
+  ],
+  "properties": {
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "in_progress", "ready", "completed", "archived"] },
+    "created_by": { "type": "string" },
+    "business_decision": {
+      "type": "object",
+      "required": ["question"],
+      "properties": {
+        "question": { "type": "string" },
+        "owner": { "type": ["string", "null"] },
+        "action_options": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "causal_question": {
+      "type": "object",
+      "required": ["question", "unit", "treatment", "outcome", "comparison_group"],
+      "properties": {
+        "question": { "type": "string" },
+        "unit": { "type": "string" },
+        "treatment": {
+          "type": "object",
+          "required": ["name", "type"],
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "enum": ["binary", "continuous", "categorical", "dose"] },
+            "treatment_time": { "type": ["string", "null"] }
+          }
+        },
+        "outcome": {
+          "type": "object",
+          "required": ["name", "type"],
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "enum": ["binary", "continuous", "count", "duration"] },
+            "outcome_window": { "type": ["string", "null"] }
+          }
+        },
+        "comparison_group": { "type": "string" }
+      }
+    },
+    "population": {
+      "type": "object",
+      "required": ["eligibility_definition"],
+      "properties": {
+        "eligibility_definition": { "type": "string" },
+        "inclusion_criteria": { "type": "array", "items": { "type": "string" } },
+        "exclusion_criteria": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "warehouse": { "type": ["string", "null"] },
+        "project": { "type": ["string", "null"] },
+        "dataset": { "type": ["string", "null"] },
+        "population_query": { "type": ["string", "null"] },
+        "treatment_outcome_query": { "type": ["string", "null"] },
+        "covariate_query": { "type": ["string", "null"] },
+        "local_path": { "type": ["string", "null"] }
+      }
+    },
+    "variables": {
+      "type": "object",
+      "required": ["pre_treatment_covariates", "forbidden_post_treatment_variables"],
+      "properties": {
+        "pre_treatment_covariates": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbidden_post_treatment_variables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "suspected_unobserved_confounders": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["confirmed", "plausible", "uncertain", "weak", "violated", "unknown"]
+          },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "methods": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "primary": { "type": ["string", "null"] },
+        "secondary": { "type": "array", "items": { "type": "string" } },
+        "robustness": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

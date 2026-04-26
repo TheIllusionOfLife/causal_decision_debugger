@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causal-debugger/schemas/identifiability_failure.schema.json",
+  "title": "Identifiability Failure",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["identifiability_status", "reasons", "recommended_next_action"],
+  "properties": {
+    "identifiability_status": { "const": "not_identifiable" },
+    "reasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "recommended_next_action": { "type": "string", "minLength": 1 },
+    "method_attempted": { "type": ["string", "null"] }
+  }
+}
