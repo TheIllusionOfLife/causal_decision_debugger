@@ -22,7 +22,7 @@ def subset_stability(
             continue
         try:
             per_segment[value] = float(estimator(sub))
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     if not per_segment:
         return {
