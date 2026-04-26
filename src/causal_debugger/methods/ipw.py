@@ -17,8 +17,13 @@ def _design_matrix(df: pd.DataFrame, covariates: Sequence[str]) -> np.ndarray:
 
 
 def _propensity(df: pd.DataFrame, treatment: str, covariates: Sequence[str]) -> np.ndarray:
-    x = _design_matrix(df, covariates)
     y = df[treatment].astype(int).values
+    if len(np.unique(y)) < 2:
+        raise ValueError(
+            f"IPW requires both treated and control units; treatment {treatment!r} has only "
+            f"one class ({y[0]})."
+        )
+    x = _design_matrix(df, covariates)
     model = LogisticRegression(max_iter=500, solver="lbfgs", C=1.0)
     model.fit(x, y)
     p = model.predict_proba(x)[:, 1]

@@ -83,6 +83,21 @@ def test_pure_time_series_routes_to_its() -> None:
     assert plan["primary_method"] == "interrupted_time_series"
 
 
+def test_aggregate_time_series_without_pre_period_is_not_identifiable() -> None:
+    # Aggregate ITS needs a pre-period to fit the counterfactual; without one and without a
+    # comparison group, no design is identifiable.
+    plan = suggest_method(
+        _ctx(
+            rollout_pattern="aggregate_time_series",
+            has_pre_period=False,
+            has_comparison_group=False,
+            has_pre_treatment_covariates=False,
+        )
+    )
+    assert plan["primary_method"] == "not_identifiable"
+    assert plan["identifiability_status"] == "not_identifiable"
+
+
 def test_plan_always_includes_required_keys() -> None:
     plan = suggest_method(_ctx())
     for key in (

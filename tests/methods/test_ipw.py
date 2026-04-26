@@ -28,3 +28,18 @@ def test_ipw_warns_on_poor_overlap() -> None:
         covariates=["paid_channel"],
     )
     assert out["diagnostics"]["propensity_overlap"]["status"] in ("warning", "failed")
+
+
+def test_ipw_rejects_single_class_treatment() -> None:
+    import pytest
+
+    scen = observational_confounding(n=1_000)
+    df = scen.frame.copy()
+    df["treated"] = 1  # collapse to a single class
+    with pytest.raises(ValueError, match="one class"):
+        estimate_ipw(
+            df,
+            treatment="treated",
+            outcome="outcome",
+            covariates=["paid_channel"],
+        )

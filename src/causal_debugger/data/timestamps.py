@@ -25,7 +25,13 @@ def check_timestamps(
     null_mask = treat.isna() | outcome.isna()
     invalid_mask = (~null_mask) & (outcome <= treat)
 
-    invalid_indices = df.index[invalid_mask].tolist()
+    raw_invalid_indices = df.index[invalid_mask].tolist()
+    invalid_indices: list[Any] = []
+    for i in raw_invalid_indices:
+        try:
+            invalid_indices.append(int(i))
+        except (TypeError, ValueError):
+            invalid_indices.append(str(i))
     invalid_unit_ids: list[Any] = []
     if unit_id_col is not None:
         invalid_unit_ids = df.loc[invalid_mask, unit_id_col].tolist()
@@ -46,7 +52,7 @@ def check_timestamps(
         "row_count": len(df),
         "invalid_row_count": invalid_count,
         "null_row_count": null_count,
-        "invalid_indices": [int(i) for i in invalid_indices],
+        "invalid_indices": invalid_indices,
         "invalid_unit_ids": invalid_unit_ids,
     }
 

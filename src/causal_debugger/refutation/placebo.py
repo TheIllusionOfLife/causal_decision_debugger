@@ -35,7 +35,8 @@ def placebo_treatment_test(
             ),
             "delta_vs_main_estimate": None,
         }
-    shuffled = rng.permutation(df[treatment].values)
+    # Cast to int so masks work for bool/object dtypes too.
+    shuffled = rng.permutation(df[treatment].astype(int).values)
     if estimator is not None:
         permuted = df.assign(**{treatment: shuffled})
         try:

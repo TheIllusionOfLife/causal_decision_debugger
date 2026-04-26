@@ -172,12 +172,9 @@ def _refute(
     if treat_col in df.columns and outcome_col in df.columns:
 
         def _placebo_estimator(permuted: pd.DataFrame) -> float:
-            try:
-                return float(primary_estimator(permuted)["effect_size"])
-            except Exception:
-                # If the primary estimator can't run on the permuted data (e.g. degenerate
-                # arms after shuffle), fall back to diff-in-means inside placebo_treatment_test.
-                raise
+            # placebo_treatment_test catches exceptions from this callable and falls back
+            # to diff-in-means, so just forward the primary estimator's effect size.
+            return float(primary_estimator(permuted)["effect_size"])
 
         refutations.append(
             placebo_treatment_test(
@@ -219,14 +216,16 @@ def _refute(
                     main_estimate=estimate["effect_size"],
                 )
             )
+    if outcome_type == "binary" and outcome_col in df.columns:
+        baseline_rate = float(df[outcome_col].mean())
+    else:
+        baseline_rate = 0.5  # ignored by sensitivity_check for non-binary outcomes
     refutations.append(
         sensitivity_check(
             main_estimate=estimate["effect_size"],
             ci_low=estimate["confidence_interval"][0],
             ci_high=estimate["confidence_interval"][1],
-            baseline_outcome_rate=float(df[outcome_col].mean())
-            if outcome_col in df.columns
-            else 0.5,
+            baseline_outcome_rate=baseline_rate,
             outcome_type=outcome_type,
         )
     )

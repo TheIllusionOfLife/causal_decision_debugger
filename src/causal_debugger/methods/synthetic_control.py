@@ -109,11 +109,18 @@ def estimate_synthetic_control(
 
     pre_residuals = target_pre - donors_pre @ weights
     pre_mspe = float(np.mean(pre_residuals**2))
+    # Scale-relative MSPE: divide by pre-period variance of the treated unit so the
+    # threshold is meaningful regardless of the outcome's units (binary, revenue, etc.).
+    pre_variance = float(np.var(target_pre, ddof=0)) if target_pre.size > 1 else 0.0
+    relative_mspe = pre_mspe / pre_variance if pre_variance > 1e-12 else pre_mspe
     solver_status = "passed" if success else "warning"
     diagnostics = {
         "pre_period_mspe": {
-            "status": "passed" if pre_mspe < 0.01 else "warning",
-            "details": f"Pre-period MSPE = {pre_mspe:.5f}",
+            "status": "passed" if relative_mspe < 0.05 else "warning",
+            "details": (
+                f"Pre-period MSPE = {pre_mspe:.5f} (relative to pre-period variance "
+                f"= {relative_mspe:.3f})"
+            ),
         },
         "donor_weights": {
             "status": "passed",
@@ -133,7 +140,7 @@ def estimate_synthetic_control(
         },
     }
 
-    confidence = "medium" if (pre_mspe < 0.05 and success) else "low"
+    confidence = "medium" if (relative_mspe < 0.25 and success) else "low"
     return {
         "method": "synthetic_control",
         "estimand": "ATT",

@@ -65,6 +65,23 @@ def suggest_method(ctx: RouterContext) -> dict[str, Any]:
             ),
         )
 
+    # Aggregate time series without a pre-period cannot identify an effect — ITS needs the
+    # pre-period to fit the counterfactual trend, and there is no comparison group available.
+    if ctx.rollout_pattern == "aggregate_time_series" and not ctx.has_pre_period:
+        return _plan(
+            "not_identifiable",
+            secondary=[],
+            assumptions=[],
+            diagnostics=[],
+            refutation=[],
+            status="not_identifiable",
+            reasoning=(
+                "Aggregate time-series with no pre-period and no comparison group: there is "
+                "no counterfactual to compare against. Collect at least 8 pre-treatment "
+                "periods or instrument a control geo before running ITS."
+            ),
+        )
+
     if ctx.threshold_assignment:
         return _plan(
             "regression_discontinuity",
