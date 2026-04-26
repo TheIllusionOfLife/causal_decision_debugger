@@ -1,0 +1,23 @@
+{
+  "identifiability_status": "weakly_identifiable",
+  "primary_method": "doubly_robust_estimation",
+  "secondary_methods": [
+    "propensity_score_weighting"
+  ],
+  "required_assumptions": [
+    "no_unobserved_confounding",
+    "positivity_overlap",
+    "treatment_precedes_outcome"
+  ],
+  "diagnostics": [
+    "covariate_balance_check",
+    "propensity_overlap_check",
+    "timestamp_order_check"
+  ],
+  "refutation_tests": [
+    "placebo_outcome",
+    "sensitivity_to_unobserved_confounding",
+    "subset_stability"
+  ],
+  "reasoning_summary": "Treatment is observational with rich pre-treatment covariates. DR earns trust against propensity model misspecification; secondary IPW supplies a sanity check."
+}
