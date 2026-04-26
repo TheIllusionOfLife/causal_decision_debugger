@@ -12,6 +12,8 @@ from typing import Any
 
 import pandas as pd
 
+from causal_debugger.data.io import read_table
+
 DEFAULT_THRESHOLD = 0.1
 
 
@@ -80,16 +82,6 @@ def check_balance(
     }
 
 
-def _read(path: Path) -> pd.DataFrame:
-    suffix = path.suffix.lower()
-    if suffix in (".parquet", ".pq"):
-        return pd.read_parquet(path)
-    if suffix in (".csv", ".tsv"):
-        sep = "\t" if suffix == ".tsv" else ","
-        return pd.read_csv(path, sep=sep)
-    raise ValueError(f"unsupported file type: {suffix}")
-
-
 def check_balance_file(
     path: Path,
     *,
@@ -98,7 +90,7 @@ def check_balance_file(
     threshold: float = DEFAULT_THRESHOLD,
     out_path: Path | None = None,
 ) -> dict[str, Any]:
-    df = _read(Path(path))
+    df = read_table(Path(path))
     payload = check_balance(
         df, treatment_col=treatment_col, covariates=list(covariates), threshold=threshold
     )

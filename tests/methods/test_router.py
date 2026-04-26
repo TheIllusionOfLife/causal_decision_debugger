@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from causal_debugger.methods.router import RouterContext, suggest_method
+from causal_debugger.methods.router import RouterContext, context_from_spec, suggest_method
 
 
 def _ctx(**overrides) -> RouterContext:
@@ -93,3 +93,45 @@ def test_plan_always_includes_required_keys() -> None:
         "reasoning_summary",
     ):
         assert key in plan
+
+
+def _spec(**overrides):
+    base = {
+        "causal_question": {"comparison_group": "eligible non-exposed users"},
+        "variables": {"pre_treatment_covariates": ["country"]},
+        "methods": {"primary": "doubly_robust_estimation"},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_context_from_spec_derives_randomized_from_primary() -> None:
+    ctx = context_from_spec(_spec(methods={"primary": "ab_test_analysis"}))
+    assert ctx.randomized is True
+
+
+def test_context_from_spec_derives_instrument_from_primary() -> None:
+    ctx = context_from_spec(_spec(methods={"primary": "instrumental_variables"}))
+    assert ctx.has_instrument is True
+
+
+def test_context_from_spec_derives_threshold_from_primary() -> None:
+    ctx = context_from_spec(_spec(methods={"primary": "regression_discontinuity"}))
+    assert ctx.threshold_assignment is True
+
+
+def test_context_from_spec_derives_did_from_primary() -> None:
+    ctx = context_from_spec(_spec(methods={"primary": "difference_in_differences"}))
+    assert ctx.has_pre_period is True
+    assert ctx.rollout_pattern == "staggered"
+
+
+def test_context_from_spec_design_block_overrides_primary() -> None:
+    ctx = context_from_spec(
+        _spec(
+            methods={"primary": "ab_test_analysis"},
+            design={"randomized": False, "has_instrument": True},
+        )
+    )
+    assert ctx.randomized is False
+    assert ctx.has_instrument is True

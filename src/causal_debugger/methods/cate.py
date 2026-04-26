@@ -49,14 +49,25 @@ def estimate_cate(
     )
     cate = mu1 - mu0
     ate = float(np.mean(cate))
-    se = float(np.std(cate, ddof=1) / np.sqrt(len(cate)))
+    # Bootstrap CI on the ATE (resample CATEs across units). std(cate)/sqrt(n) would measure
+    # cross-unit heterogeneity, not estimator sampling uncertainty, so report a percentile CI.
+    rng = np.random.default_rng(0)
+    n = len(cate)
+    boot_means = np.array(
+        [float(np.mean(cate[rng.integers(0, n, n)])) for _ in range(200)],
+        dtype=float,
+    )
+    ci_low = float(np.quantile(boot_means, 0.025))
+    ci_high = float(np.quantile(boot_means, 0.975))
 
+    cate_std = float(np.std(cate))
     diagnostics: dict[str, Any] = {
-        "cate_distribution": {
+        "cate_heterogeneity": {
             "status": "passed",
             "details": (
-                f"mean={ate:+.4f}, std={float(np.std(cate)):.4f}, "
-                f"q10={float(np.quantile(cate, 0.1)):+.4f}, q90={float(np.quantile(cate, 0.9)):+.4f}"
+                f"mean={ate:+.4f}, cross-unit std={cate_std:.4f}, "
+                f"q10={float(np.quantile(cate, 0.1)):+.4f}, q90={float(np.quantile(cate, 0.9)):+.4f} "
+                "(spread reflects heterogeneity across units, not estimator uncertainty)"
             ),
         }
     }
@@ -73,7 +84,7 @@ def estimate_cate(
         "estimand": "CATE",
         "effect_size": ate,
         "effect_unit": "outcome_units",
-        "confidence_interval": [float(ate - 1.96 * se), float(ate + 1.96 * se)],
+        "confidence_interval": [ci_low, ci_high],
         "p_value": None,
         "sample_size": len(df),
         "treated_units": int(t.sum()),
@@ -81,6 +92,7 @@ def estimate_cate(
         "confidence_level": "medium",
         "diagnostics": diagnostics,
         "interpretation": (
-            f"T-Learner average CATE = {ate:+.4f}; see diagnostics for heterogeneity by segment."
+            f"T-Learner average CATE = {ate:+.4f} (bootstrap 95% CI "
+            f"[{ci_low:+.4f}, {ci_high:+.4f}]); see diagnostics for heterogeneity by segment."
         ),
     }

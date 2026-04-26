@@ -10,6 +10,8 @@ from typing import Any
 
 import pandas as pd
 
+from causal_debugger.data.io import read_table
+
 
 def check_timestamps(
     df: pd.DataFrame,
@@ -49,16 +51,6 @@ def check_timestamps(
     }
 
 
-def _read(path: Path) -> pd.DataFrame:
-    suffix = path.suffix.lower()
-    if suffix in (".parquet", ".pq"):
-        return pd.read_parquet(path)
-    if suffix in (".csv", ".tsv"):
-        sep = "\t" if suffix == ".tsv" else ","
-        return pd.read_csv(path, sep=sep, parse_dates=True)
-    raise ValueError(f"unsupported file type: {suffix}")
-
-
 def check_timestamps_file(
     path: Path,
     treatment_time_col: str,
@@ -67,7 +59,7 @@ def check_timestamps_file(
     unit_id_col: str | None = None,
     out_path: Path | None = None,
 ) -> dict[str, Any]:
-    df = _read(Path(path))
+    df = read_table(Path(path), parse_dates=True)
     payload = check_timestamps(df, treatment_time_col, outcome_time_col, unit_id_col=unit_id_col)
     if out_path is not None:
         out_path = Path(out_path)

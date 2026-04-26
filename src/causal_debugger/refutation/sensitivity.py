@@ -30,7 +30,19 @@ def sensitivity_check(
     ci_low: float,
     ci_high: float,
     baseline_outcome_rate: float,
+    outcome_type: str = "binary",
 ) -> dict[str, Any]:
+    if outcome_type != "binary":
+        return {
+            "name": "sensitivity_to_unobserved_confounding",
+            "status": "warning",
+            "details": (
+                f"E-value sensitivity uses a risk-ratio approximation that is only valid for "
+                f"binary outcomes; outcome_type={outcome_type!r} is not supported here. "
+                "Run a method-specific sensitivity check (e.g., DoWhy add_unobserved_common_cause) instead."
+            ),
+            "delta_vs_main_estimate": None,
+        }
     rr_point = _approximate_risk_ratio(main_estimate, baseline_outcome_rate)
     rr_bound = _approximate_risk_ratio(
         ci_low if main_estimate >= 0 else ci_high, baseline_outcome_rate

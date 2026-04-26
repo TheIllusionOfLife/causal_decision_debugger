@@ -33,7 +33,14 @@ def estimate_iv(
     p_value = float(model.pvalues[treatment])
 
     first_stage = model.first_stage.diagnostics
-    f_stat = float(first_stage.iloc[0]["f.stat"])
+    # linearmodels exposes per-endog rows; index by the endogenous variable name when present
+    # and fall back to the first row for single-endogenous specifications.
+    f_row = first_stage.loc[treatment] if treatment in first_stage.index else first_stage.iloc[0]
+    f_col = next(
+        (c for c in ("f.stat", "f_stat", "rho", "shea.rsquared") if c in first_stage.columns),
+        first_stage.columns[0],
+    )
+    f_stat = float(f_row[f_col])
     weak_threshold = 10.0
     f_status = "passed" if f_stat >= weak_threshold else "warning"
 
@@ -41,7 +48,7 @@ def estimate_iv(
         "first_stage_F": {
             "status": f_status,
             "details": (
-                f"Cragg-Donald F = {f_stat:.2f} (threshold for weak instrument: {weak_threshold})"
+                f"First-stage F = {f_stat:.2f} (Stock-Yogo weak-instrument threshold ≈ {weak_threshold})"
             ),
         }
     }

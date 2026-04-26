@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 from jsonschema import Draft202012Validator
 
 from causal_debugger.methods.synthetic_control import estimate_synthetic_control
@@ -52,3 +53,45 @@ def test_synthetic_control_weights_sum_to_one() -> None:
     )
     weights_sum = out["diagnostics"]["donor_weights"]["details"]
     assert "sum=" in weights_sum
+    assert "solver_status" in out["diagnostics"]
+
+
+def test_synthetic_control_single_post_period_uses_placebo_ci() -> None:
+    df = _panel()
+    df = df[df["period"] <= 15]  # one post-period (period=15)
+    out = estimate_synthetic_control(
+        df,
+        unit_col="unit_id",
+        period_col="period",
+        outcome_col="outcome",
+        treated_unit=0,
+        treat_period=15,
+    )
+    assert "placebo permutation" in out["interpretation"]
+
+
+def test_synthetic_control_rejects_unbalanced_panel() -> None:
+    df = _panel()
+    df = df[~((df["unit_id"] == 1) & (df["period"] == 5))]  # drop one cell
+    with pytest.raises(ValueError, match="balanced panel"):
+        estimate_synthetic_control(
+            df,
+            unit_col="unit_id",
+            period_col="period",
+            outcome_col="outcome",
+            treated_unit=0,
+            treat_period=15,
+        )
+
+
+def test_synthetic_control_rejects_missing_treated_unit() -> None:
+    df = _panel()
+    with pytest.raises(ValueError, match="treated_unit"):
+        estimate_synthetic_control(
+            df,
+            unit_col="unit_id",
+            period_col="period",
+            outcome_col="outcome",
+            treated_unit=99,
+            treat_period=15,
+        )

@@ -10,6 +10,8 @@ from typing import Any
 
 import pandas as pd
 
+from causal_debugger.data.io import read_table
+
 
 def _column_summary(series: pd.Series) -> dict[str, Any]:
     missing = int(series.isna().sum())
@@ -52,18 +54,8 @@ def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def _read(path: Path) -> pd.DataFrame:
-    suffix = path.suffix.lower()
-    if suffix in (".parquet", ".pq"):
-        return pd.read_parquet(path)
-    if suffix in (".csv", ".tsv"):
-        sep = "\t" if suffix == ".tsv" else ","
-        return pd.read_csv(path, sep=sep)
-    raise ValueError(f"unsupported file type: {suffix}")
-
-
 def profile_file(path: Path, out_path: Path | None = None) -> dict[str, Any]:
-    df = _read(Path(path))
+    df = read_table(Path(path))
     payload = profile_dataframe(df)
     if out_path is not None:
         out_path = Path(out_path)

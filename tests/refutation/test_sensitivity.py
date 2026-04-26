@@ -25,3 +25,16 @@ def test_sensitivity_check_flags_fragile_estimate() -> None:
         main_estimate=0.005, ci_low=0.0, ci_high=0.010, baseline_outcome_rate=0.30
     )
     assert fragile["status"] in ("warning", "failed")
+
+
+def test_sensitivity_check_skips_non_binary_outcome() -> None:
+    out = sensitivity_check(
+        main_estimate=2.5,
+        ci_low=1.0,
+        ci_high=4.0,
+        baseline_outcome_rate=10.0,
+        outcome_type="continuous",
+    )
+    Draft202012Validator(load_schema("refutation_result")).validate(out)
+    assert out["status"] == "warning"
+    assert "binary outcomes" in out["details"]

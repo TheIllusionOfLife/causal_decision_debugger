@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -16,12 +17,38 @@ def placebo_treatment_test(
     main_estimate: float,
     threshold: float = 0.01,
     seed: int = 0,
+    estimator: Callable[[pd.DataFrame], float] | None = None,
 ) -> dict[str, Any]:
+    """Shuffle the treatment assignment and re-estimate; expect a near-null effect.
+
+    By default the placebo uses difference-in-means on the shuffled treatment, which is
+    appropriate when the main estimator is randomized A/B style. Pass ``estimator`` to
+    re-run a method-specific estimator (IPW, DR, etc.) on the permuted treatment column.
+    """
     rng = np.random.default_rng(seed)
+    if df[treatment].nunique(dropna=True) < 2:
+        return {
+            "name": "placebo_treatment",
+            "status": "warning",
+            "details": (
+                f"Treatment column {treatment!r} has only one class; placebo permutation is undefined."
+            ),
+            "delta_vs_main_estimate": None,
+        }
     shuffled = rng.permutation(df[treatment].values)
-    treat_y = df.loc[shuffled == 1, outcome].astype(float)
-    control_y = df.loc[shuffled == 0, outcome].astype(float)
-    placebo_effect = float(treat_y.mean() - control_y.mean())
+    if estimator is not None:
+        permuted = df.assign(**{treatment: shuffled})
+        try:
+            placebo_effect = float(estimator(permuted))
+        except Exception:
+            # Fall back to diff-in-means rather than failing the whole refutation.
+            treat_y = df.loc[shuffled == 1, outcome].astype(float)
+            control_y = df.loc[shuffled == 0, outcome].astype(float)
+            placebo_effect = float(treat_y.mean() - control_y.mean())
+    else:
+        treat_y = df.loc[shuffled == 1, outcome].astype(float)
+        control_y = df.loc[shuffled == 0, outcome].astype(float)
+        placebo_effect = float(treat_y.mean() - control_y.mean())
     delta = placebo_effect  # vs zero, since true effect should be ~0 under shuffled treatment
     if abs(placebo_effect) > max(threshold, abs(main_estimate) * 0.25):
         status = "warning"

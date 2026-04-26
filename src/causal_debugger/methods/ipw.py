@@ -37,12 +37,17 @@ def estimate_ipw(
     y = df[outcome].astype(float).values
     w1 = t / p
     w0 = (1 - t) / (1 - p)
-    # Hájek (stabilized) for robustness
-    mu1 = float(np.sum(w1 * y) / max(np.sum(w1), 1e-9))
-    mu0 = float(np.sum(w0 * y) / max(np.sum(w0), 1e-9))
+    # Hájek (stabilized) point estimate
+    sum_w1 = max(float(np.sum(w1)), 1e-9)
+    sum_w0 = max(float(np.sum(w0)), 1e-9)
+    mu1 = float(np.sum(w1 * y) / sum_w1)
+    mu0 = float(np.sum(w0 * y) / sum_w0)
     ate = mu1 - mu0
     n = len(df)
-    influence = (t * (y - mu1) / p) - ((1 - t) * (y - mu0) / (1 - p))
+    # Hájek influence function: each weight stream divided by its mean weight.
+    mean_w1 = sum_w1 / n
+    mean_w0 = sum_w0 / n
+    influence = (w1 * (y - mu1) / mean_w1) - (w0 * (y - mu0) / mean_w0)
     se = float(np.std(influence, ddof=1) / np.sqrt(n))
     ci_low = ate - 1.96 * se
     ci_high = ate + 1.96 * se

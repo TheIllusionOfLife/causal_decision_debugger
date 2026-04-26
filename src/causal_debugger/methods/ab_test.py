@@ -22,12 +22,23 @@ def _diff_in_means(df: pd.DataFrame, *, treatment: str, outcome: str) -> dict[st
     n_t, n_c = len(treat), len(control)
     if n_t == 0 or n_c == 0:
         raise ValueError("A/B analysis requires both treated and control units.")
+    if n_t < 2 or n_c < 2:
+        raise ValueError(
+            f"A/B analysis requires at least 2 observations per arm (got n_t={n_t}, n_c={n_c})."
+        )
     diff = float(treat.mean() - control.mean())
-    se = math.sqrt(treat.var(ddof=1) / n_t + control.var(ddof=1) / n_c)
-    z = diff / se if se > 0 else float("inf")
-    p = 2 * (1 - stats.norm.cdf(abs(z))) if math.isfinite(z) else 0.0
-    ci_low = diff - 1.96 * se
-    ci_high = diff + 1.96 * se
+    var_t = float(treat.var(ddof=1))
+    var_c = float(control.var(ddof=1))
+    se = math.sqrt(var_t / n_t + var_c / n_c)
+    if se == 0.0:
+        # Both arms are constant. p=1 when diff=0, otherwise the test is degenerate.
+        p = 1.0 if diff == 0.0 else 0.0
+        ci_low = ci_high = diff
+    else:
+        z = diff / se
+        p = 2 * (1 - stats.norm.cdf(abs(z)))
+        ci_low = diff - 1.96 * se
+        ci_high = diff + 1.96 * se
     return {
         "effect_size": diff,
         "se": se,

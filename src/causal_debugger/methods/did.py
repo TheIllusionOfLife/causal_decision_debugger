@@ -62,8 +62,9 @@ def estimate_did(
     diagnostics: dict[str, Any] = {}
     pretrend_status = "passed"
     if period_col is not None and period_col in df.columns:
-        treat_period = int(np.median(df[df[post_col] == 1][period_col].astype(int)))
-        # Parallel-trends check on the pre-period.
+        post_periods = df[df[post_col] == 1][period_col]
+        treat_period = int(post_periods.astype(int).min()) if not post_periods.empty else 0
+        # Parallel-trends check on the pre-period (strictly periods before first treated period).
         diagnostics["pre_trend_test"] = _pre_trend_test(
             df,
             group_col=group_col,

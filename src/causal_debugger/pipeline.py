@@ -12,6 +12,7 @@ import pandas as pd
 import yaml
 
 from causal_debugger.data.balance import check_balance
+from causal_debugger.data.io import read_table
 from causal_debugger.data.profile import profile_dataframe
 from causal_debugger.data.timestamps import check_timestamps
 from causal_debugger.methods import (
@@ -33,66 +34,82 @@ from causal_debugger.refutation.subset import subset_stability
 from causal_debugger.reporting.render import render_report
 from causal_debugger.spec.validate import validate_spec
 
-METHOD_DISPATCH = {
-    "ab_test_analysis": lambda df, spec: ab_test.estimate_ab(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-    ),
-    "regression_adjustment": lambda df, spec: ab_test.estimate_ab(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        covariates=spec["variables"]["pre_treatment_covariates"],
-    ),
-    "difference_in_differences": lambda df, spec: did.estimate_did(
-        df, group_col="group", post_col="post", outcome_col="outcome"
-    ),
-    "interrupted_time_series": lambda df, spec: its.estimate_its(
-        df, period_col="period", post_col="post", outcome_col="outcome"
-    ),
-    "synthetic_control": lambda df, spec: synthetic_control.estimate_synthetic_control(
-        df,
-        unit_col="unit_id",
-        period_col="period",
-        outcome_col="outcome",
-        treated_unit=0,
-        treat_period=int(df["period"].median()),
-    ),
-    "propensity_score_weighting": lambda df, spec: ipw.estimate_ipw(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        covariates=spec["variables"]["pre_treatment_covariates"],
-    ),
-    "matching": lambda df, spec: matching.estimate_matching(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        covariates=spec["variables"]["pre_treatment_covariates"],
-    ),
-    "doubly_robust_estimation": lambda df, spec: doubly_robust.estimate_doubly_robust(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        covariates=spec["variables"]["pre_treatment_covariates"],
-    ),
-    "cate": lambda df, spec: cate.estimate_cate(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        covariates=spec["variables"]["pre_treatment_covariates"],
-    ),
-    "instrumental_variables": lambda df, spec: iv.estimate_iv(
-        df,
-        treatment=spec["causal_question"]["treatment"]["name"],
-        outcome=spec["causal_question"]["outcome"]["name"],
-        instrument="instrument",
-    ),
-    "regression_discontinuity": lambda df, spec: rdd.estimate_rdd(
-        df, running_var="running", outcome="outcome", cutoff=0.0
-    ),
+# Default design column names. Specs can override via spec["data"]["columns"].
+_DEFAULT_DESIGN_COLUMNS: dict[str, Any] = {
+    "group": "group",
+    "post": "post",
+    "period": "period",
+    "unit_id": "unit_id",
+    "instrument": "instrument",
+    "running": "running",
+    "treated_unit": 0,
+    "rdd_cutoff": 0.0,
 }
+
+
+def _design_columns(spec: dict[str, Any]) -> dict[str, Any]:
+    cols = dict(_DEFAULT_DESIGN_COLUMNS)
+    cols.update((spec.get("data") or {}).get("columns") or {})
+    return cols
+
+
+def _treat_period(df: pd.DataFrame, post_col: str, period_col: str) -> int:
+    """First period at which post == 1. Falls back to median if post is unavailable."""
+    if post_col in df.columns and period_col in df.columns:
+        post_periods = df.loc[df[post_col].astype(int) == 1, period_col]
+        if not post_periods.empty:
+            return int(post_periods.astype(int).min())
+    if period_col in df.columns:
+        return int(df[period_col].astype(int).median())
+    raise ValueError(f"Cannot determine treatment period: {period_col!r} not in dataframe.")
+
+
+def _make_dispatch(spec: dict[str, Any]) -> dict[str, Any]:
+    treat = spec["causal_question"]["treatment"]["name"]
+    outcome = spec["causal_question"]["outcome"]["name"]
+    covariates = spec["variables"]["pre_treatment_covariates"]
+    cols = _design_columns(spec)
+    return {
+        "ab_test_analysis": lambda df: ab_test.estimate_ab(df, treatment=treat, outcome=outcome),
+        "regression_adjustment": lambda df: ab_test.estimate_ab(
+            df, treatment=treat, outcome=outcome, covariates=covariates
+        ),
+        "difference_in_differences": lambda df: did.estimate_did(
+            df, group_col=cols["group"], post_col=cols["post"], outcome_col=outcome
+        ),
+        "interrupted_time_series": lambda df: its.estimate_its(
+            df, period_col=cols["period"], post_col=cols["post"], outcome_col=outcome
+        ),
+        "synthetic_control": lambda df: synthetic_control.estimate_synthetic_control(
+            df,
+            unit_col=cols["unit_id"],
+            period_col=cols["period"],
+            outcome_col=outcome,
+            treated_unit=cols["treated_unit"],
+            treat_period=_treat_period(df, cols["post"], cols["period"]),
+        ),
+        "propensity_score_weighting": lambda df: ipw.estimate_ipw(
+            df, treatment=treat, outcome=outcome, covariates=covariates
+        ),
+        "matching": lambda df: matching.estimate_matching(
+            df, treatment=treat, outcome=outcome, covariates=covariates
+        ),
+        "doubly_robust_estimation": lambda df: doubly_robust.estimate_doubly_robust(
+            df, treatment=treat, outcome=outcome, covariates=covariates
+        ),
+        "cate": lambda df: cate.estimate_cate(
+            df, treatment=treat, outcome=outcome, covariates=covariates
+        ),
+        "instrumental_variables": lambda df: iv.estimate_iv(
+            df, treatment=treat, outcome=outcome, instrument=cols["instrument"]
+        ),
+        "regression_discontinuity": lambda df: rdd.estimate_rdd(
+            df,
+            running_var=cols["running"],
+            outcome=outcome,
+            cutoff=float(cols["rdd_cutoff"]),
+        ),
+    }
 
 
 def _load_data(spec: dict[str, Any], analysis_dir: Path) -> pd.DataFrame:
@@ -105,7 +122,7 @@ def _load_data(spec: dict[str, Any], analysis_dir: Path) -> pd.DataFrame:
         candidate = (analysis_dir / candidate).resolve()
         if not candidate.exists():
             candidate = (Path.cwd() / rel).resolve()
-    return pd.read_parquet(candidate)
+    return read_table(candidate)
 
 
 def _audit(df: pd.DataFrame, spec: dict[str, Any]) -> dict[str, Any]:
@@ -113,15 +130,22 @@ def _audit(df: pd.DataFrame, spec: dict[str, Any]) -> dict[str, Any]:
     treat_col = spec["causal_question"]["treatment"]["name"]
     treat_time = spec["causal_question"]["treatment"].get("treatment_time")
     outcome_time = spec["causal_question"]["outcome"].get("outcome_window")
+    cols = _design_columns(spec)
+    unit_id_col = cols.get("unit_id_audit") or cols.get("unit_id")
+    outcome_time_col = cols.get("outcome_time")
     audit: dict[str, Any] = {"profile": profile}
     if treat_time and outcome_time and treat_time in df.columns:
-        outcome_col = outcome_time if outcome_time in df.columns else "d7_window_end_at"
-        if outcome_col in df.columns:
+        # Prefer an explicit outcome_time column from spec.data.columns, then the literal
+        # outcome_window value, and only consider unit_id columns that actually exist.
+        candidate_outcome_cols = [
+            c for c in (outcome_time_col, outcome_time) if c and c in df.columns
+        ]
+        if candidate_outcome_cols:
             audit["timestamps"] = check_timestamps(
                 df,
                 treat_time,
-                outcome_col,
-                unit_id_col="user_id" if "user_id" in df.columns else None,
+                candidate_outcome_cols[0],
+                unit_id_col=unit_id_col if unit_id_col in df.columns else None,
             )
     covariates = spec["variables"]["pre_treatment_covariates"]
     if treat_col in df.columns and covariates:
@@ -132,12 +156,25 @@ def _audit(df: pd.DataFrame, spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def _refute(
-    df: pd.DataFrame, spec: dict[str, Any], estimate: dict[str, Any]
+    df: pd.DataFrame,
+    spec: dict[str, Any],
+    estimate: dict[str, Any],
+    primary_estimator: Any,
 ) -> list[dict[str, Any]]:
     treat_col = spec["causal_question"]["treatment"]["name"]
     outcome_col = spec["causal_question"]["outcome"]["name"]
+    outcome_type = spec["causal_question"]["outcome"].get("type", "binary")
     refutations: list[dict[str, Any]] = []
     if treat_col in df.columns and outcome_col in df.columns:
+
+        def _placebo_estimator(permuted: pd.DataFrame) -> float:
+            try:
+                return float(primary_estimator(permuted)["effect_size"])
+            except Exception:
+                # If the primary estimator can't run on the permuted data (e.g. degenerate
+                # arms after shuffle), fall back to diff-in-means inside placebo_treatment_test.
+                raise
+
         refutations.append(
             placebo_treatment_test(
                 df,
@@ -145,13 +182,21 @@ def _refute(
                 outcome=outcome_col,
                 main_estimate=estimate["effect_size"],
                 seed=0,
+                estimator=_placebo_estimator,
             )
         )
 
-        def _ab_estimator(sub: pd.DataFrame) -> float:
-            return float(
-                ab_test.estimate_ab(sub, treatment=treat_col, outcome=outcome_col)["effect_size"]
-            )
+        def _primary_subset(sub: pd.DataFrame) -> float:
+            try:
+                return float(primary_estimator(sub)["effect_size"])
+            except Exception:
+                # Some estimators require columns the segment may lack; fall back to
+                # difference-in-means so subset stability still produces a signal.
+                return float(
+                    ab_test.estimate_ab(sub, treatment=treat_col, outcome=outcome_col)[
+                        "effect_size"
+                    ]
+                )
 
         segment = next(
             (
@@ -166,7 +211,7 @@ def _refute(
                 subset_stability(
                     df,
                     segment_col=segment,
-                    estimator=_ab_estimator,
+                    estimator=_primary_subset,
                     main_estimate=estimate["effect_size"],
                 )
             )
@@ -178,6 +223,7 @@ def _refute(
             baseline_outcome_rate=float(df[outcome_col].mean())
             if outcome_col in df.columns
             else 0.5,
+            outcome_type=outcome_type,
         )
     )
     return refutations
@@ -199,14 +245,16 @@ def run(analysis_dir: Path) -> dict[str, Any]:
     artifacts_dir = analysis_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    def _dump(payload: Any) -> str:
+        # allow_nan=False so estimator NaNs/Infs fail loudly instead of producing invalid JSON.
+        return json.dumps(payload, indent=2, allow_nan=False, default=str)
+
     if "balance" in audit:
-        (artifacts_dir / "balance_check.json").write_text(json.dumps(audit["balance"], indent=2))
+        (artifacts_dir / "balance_check.json").write_text(_dump(audit["balance"]))
     if "timestamps" in audit:
-        (artifacts_dir / "timestamp_check.json").write_text(
-            json.dumps(audit["timestamps"], indent=2, default=str)
-        )
-    (artifacts_dir / "eda_summary.json").write_text(json.dumps(audit["profile"], indent=2))
-    (analysis_dir / "method_plan.json").write_text(json.dumps(plan, indent=2))
+        (artifacts_dir / "timestamp_check.json").write_text(_dump(audit["timestamps"]))
+    (artifacts_dir / "eda_summary.json").write_text(_dump(audit["profile"]))
+    (analysis_dir / "method_plan.json").write_text(_dump(plan))
 
     if plan["identifiability_status"] == "not_identifiable" or primary == "not_identifiable":
         failure = {
@@ -220,7 +268,7 @@ def run(analysis_dir: Path) -> dict[str, Any]:
             ),
             "method_attempted": primary,
         }
-        (artifacts_dir / "identifiability_failure.json").write_text(json.dumps(failure, indent=2))
+        (artifacts_dir / "identifiability_failure.json").write_text(_dump(failure))
         ledger_path = analysis_dir / "assumption_ledger.yaml"
         ledger = yaml.safe_load(ledger_path.read_text()) if ledger_path.exists() else None
         ctx_render = {
@@ -235,14 +283,15 @@ def run(analysis_dir: Path) -> dict[str, Any]:
         (analysis_dir / "report.md").write_text(report)
         return {"status": "not_identifiable", "report": str(analysis_dir / "report.md")}
 
-    estimator_fn = METHOD_DISPATCH.get(primary)
+    dispatch = _make_dispatch(spec)
+    estimator_fn = dispatch.get(primary)
     if estimator_fn is None:
         raise ValueError(f"No estimator wired for primary method {primary!r}")
-    estimate = estimator_fn(df, spec)
-    (artifacts_dir / "estimates.json").write_text(json.dumps(estimate, indent=2))
+    estimate = estimator_fn(df)
+    (artifacts_dir / "estimates.json").write_text(_dump(estimate))
 
-    refutations = _refute(df, spec, estimate)
-    (artifacts_dir / "robustness.json").write_text(json.dumps(refutations, indent=2))
+    refutations = _refute(df, spec, estimate, estimator_fn)
+    (artifacts_dir / "robustness.json").write_text(_dump(refutations))
 
     ledger_path = analysis_dir / "assumption_ledger.yaml"
     ledger = yaml.safe_load(ledger_path.read_text()) if ledger_path.exists() else None

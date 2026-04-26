@@ -176,22 +176,76 @@ def suggest_method(ctx: RouterContext) -> dict[str, Any]:
     )
 
 
+_PRIMARY_TO_FLAGS: dict[str, dict[str, Any]] = {
+    "ab_test_analysis": {"randomized": True},
+    "regression_adjustment": {"randomized": True},
+    "difference_in_differences": {"rollout_pattern": "staggered", "has_pre_period": True},
+    "interrupted_time_series": {
+        "rollout_pattern": "aggregate_time_series",
+        "has_pre_period": True,
+    },
+    "synthetic_control": {
+        "rollout_pattern": "single_unit",
+        "has_pre_period": True,
+        "has_donor_pool": True,
+    },
+    "instrumental_variables": {"has_instrument": True},
+    "regression_discontinuity": {"threshold_assignment": True},
+}
+
+
 def context_from_spec(spec: dict[str, Any]) -> RouterContext:
-    """Best-effort mapping from a causal_spec dict to RouterContext defaults."""
+    """Best-effort mapping from a causal_spec dict to RouterContext defaults.
+
+    Pulls explicit hints from ``spec.design`` (preferred) and falls back to
+    ``spec.methods.primary`` so a spec that already names a design family routes
+    consistently.
+    """
     variables = spec.get("variables") or {}
     pre = variables.get("pre_treatment_covariates") or []
     methods = spec.get("methods") or {}
+    design = spec.get("design") or {}
+
+    flags: dict[str, Any] = {
+        "randomized": False,
+        "has_pre_period": False,
+        "rollout_pattern": "single",
+        "threshold_assignment": False,
+        "has_donor_pool": False,
+        "has_instrument": False,
+    }
+    primary = methods.get("primary")
+    if primary in _PRIMARY_TO_FLAGS:
+        flags.update(_PRIMARY_TO_FLAGS[primary])
+    # design block overrides primary-derived defaults
+    for key in (
+        "randomized",
+        "has_pre_period",
+        "threshold_assignment",
+        "has_donor_pool",
+        "has_instrument",
+    ):
+        if key in design:
+            flags[key] = bool(design[key])
+    if design.get("rollout_pattern") in (
+        "single",
+        "staggered",
+        "single_unit",
+        "aggregate_time_series",
+    ):
+        flags["rollout_pattern"] = design["rollout_pattern"]
+
     return RouterContext(
-        randomized=False,
-        has_pre_period=False,
-        rollout_pattern="single",
-        threshold_assignment=False,
-        has_donor_pool=False,
-        has_instrument=False,
+        randomized=flags["randomized"],
+        has_pre_period=flags["has_pre_period"],
+        rollout_pattern=flags["rollout_pattern"],
+        threshold_assignment=flags["threshold_assignment"],
+        has_donor_pool=flags["has_donor_pool"],
+        has_instrument=flags["has_instrument"],
         has_pre_treatment_covariates=bool(pre),
         has_comparison_group=bool(spec.get("causal_question", {}).get("comparison_group")),
         heterogeneous_effect_question=bool(methods.get("heterogeneous_effect")),
-        sample_size=0,
+        sample_size=int(design.get("sample_size", 0) or 0),
         pre_treatment_covariate_count=len(pre),
     )
 
