@@ -1,0 +1,24 @@
+{
+  "primary_method": "doubly_robust_estimation",
+  "secondary_methods": [
+    "propensity_score_weighting",
+    "matching"
+  ],
+  "required_assumptions": [
+    "no_unobserved_confounding",
+    "positivity_overlap",
+    "treatment_precedes_outcome"
+  ],
+  "diagnostics": [
+    "covariate_balance_check",
+    "propensity_overlap_check",
+    "missingness_check"
+  ],
+  "refutation_tests": [
+    "placebo_outcome",
+    "subset_stability",
+    "sensitivity_to_unobserved_confounding"
+  ],
+  "identifiability_status": "weakly_identifiable",
+  "reasoning_summary": "Observational user-level treatment with rich pre-treatment covariates. Doubly robust earns trust against either propensity or outcome misspecification; IPW and matching are kept as sanity-check secondaries."
+}

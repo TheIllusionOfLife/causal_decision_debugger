@@ -1,0 +1,22 @@
+assumptions:
+  - id: A1
+    name: Treatment happened before outcome
+    status: unknown
+    importance: critical
+    evidence: ""
+    risk_if_false: "Time leakage; estimate is mechanical, not causal."
+    how_to_check_or_improve: "Run check_timestamps on the analysis dataset."
+  - id: A2
+    name: No major simultaneous change
+    status: unknown
+    importance: high
+    evidence: ""
+    risk_if_false: "Estimated effect may reflect a different intervention."
+    how_to_check_or_improve: "Inspect rollout and launch calendars; ask the launch owner."
+  - id: A3
+    name: No unobserved confounding after adjustment
+    status: unknown
+    importance: critical
+    evidence: ""
+    risk_if_false: "Estimate may reflect selection bias."
+    how_to_check_or_improve: "Run sensitivity analysis or randomize."

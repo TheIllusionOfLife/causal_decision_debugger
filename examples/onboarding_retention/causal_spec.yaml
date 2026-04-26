@@ -1,0 +1,69 @@
+analysis_id: onboarding_retention_2026_03
+status: draft
+created_by: causal-decision-debugger
+
+business_decision:
+  question: "Should we keep onboarding_v2?"
+  owner: growth_team
+  action_options:
+    - keep
+    - rollback
+    - run_followup_experiment
+
+causal_question:
+  question: "What is the effect of onboarding_v2 exposure on D7 retention?"
+  unit: user
+  treatment:
+    name: onboarding_v2_exposed
+    type: binary
+    treatment_time: onboarding_started_at
+  outcome:
+    name: retained_d7
+    type: binary
+    outcome_window: "signup_at + 7 days"
+  comparison_group: "eligible users not exposed to onboarding_v2"
+
+population:
+  eligibility_definition: "new users who signed up during rollout window"
+  inclusion_criteria:
+    - "has signup timestamp"
+    - "eligible for onboarding experience"
+  exclusion_criteria:
+    - "internal test accounts"
+
+data:
+  warehouse: local
+  local_path: examples/onboarding_retention/data/observational.parquet
+
+variables:
+  pre_treatment_covariates:
+    - country
+    - device_type
+    - acquisition_channel
+    - signup_week
+  forbidden_post_treatment_variables:
+    - tutorial_completed
+    - first_purchase_after_signup
+  suspected_unobserved_confounders:
+    - user_motivation
+
+assumptions:
+  no_unobserved_confounding:
+    status: uncertain
+    notes: "User motivation is not directly observed."
+  treatment_precedes_outcome:
+    status: confirmed
+  no_simultaneous_major_change:
+    status: unknown
+  positivity_overlap:
+    status: unknown
+  stable_unit_treatment_value:
+    status: plausible
+
+methods:
+  primary: doubly_robust_estimation
+  secondary:
+    - propensity_score_weighting
+  robustness:
+    - placebo_outcome
+    - sensitivity_to_unobserved_confounding

@@ -1,0 +1,29 @@
+assumptions:
+  - id: A1
+    name: Treatment happened before outcome
+    status: confirmed
+    importance: critical
+    evidence: "onboarding_started_at occurs before D7 retention window"
+    risk_if_false: "Time leakage; estimate is mechanical, not causal."
+    how_to_check_or_improve: "Validated by check_timestamps script."
+  - id: A2
+    name: No major simultaneous change
+    status: unknown
+    importance: high
+    evidence: "Rollout calendar not yet inspected."
+    risk_if_false: "Effect may reflect another launch."
+    how_to_check_or_improve: "Ask the launch owner; inspect release logs."
+  - id: A3
+    name: No unobserved confounding after adjustment
+    status: weak
+    importance: critical
+    evidence: "Country, device, channel, signup week available; user motivation not."
+    risk_if_false: "Estimate may reflect selection bias."
+    how_to_check_or_improve: "Run sensitivity refuter; consider randomized holdout."
+  - id: A4
+    name: Positivity / overlap on covariates
+    status: unknown
+    importance: high
+    evidence: "Not yet checked."
+    risk_if_false: "Weighting becomes unstable; estimate driven by extrapolation."
+    how_to_check_or_improve: "Check propensity overlap as part of estimation diagnostics."

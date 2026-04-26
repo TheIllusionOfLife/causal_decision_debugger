@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causal-debugger/schemas/refutation_result.schema.json",
+  "title": "Refutation Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "status", "details"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["passed", "warning", "failed"] },
+    "details": { "type": "string" },
+    "delta_vs_main_estimate": { "type": ["number", "null"] }
+  }
+}
