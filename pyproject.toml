@@ -10,11 +10,15 @@ authors = [
 ]
 dependencies = [
     "pandas>=2.2",
-    "numpy>=1.26,<2.3",
-    "scipy>=1.11",
-    "scikit-learn>=1.4",
+    "numpy>=1.26,<3.0",
+    # scipy upper-bound is dictated by dowhy 0.14 which pins scipy<=1.15.3 on Python <3.13;
+    # raise this once dowhy relaxes the cap.
+    "scipy>=1.11,<1.16",
+    # scikit-learn upper-bound is dictated by econml 0.16 which pins scikit-learn<1.7;
+    # raise this once econml relaxes the cap.
+    "scikit-learn>=1.6,<1.7",
     "statsmodels>=0.14",
-    "linearmodels>=6.0",
+    "linearmodels>=7.0",
     "pyyaml>=6.0",
     "jinja2>=3.1",
     "jsonschema>=4.21",
