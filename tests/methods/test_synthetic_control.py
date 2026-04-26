@@ -95,3 +95,19 @@ def test_synthetic_control_rejects_missing_treated_unit() -> None:
             treated_unit=99,
             treat_period=15,
         )
+
+
+def test_synthetic_control_rejects_duplicate_unit_period_rows() -> None:
+    df = _panel()
+    dup = df.iloc[[0]].copy()
+    dup["outcome"] = dup["outcome"] + 1.0
+    df = pd.concat([df, dup], ignore_index=True)
+    with pytest.raises(ValueError, match="duplicate"):
+        estimate_synthetic_control(
+            df,
+            unit_col="unit_id",
+            period_col="period",
+            outcome_col="outcome",
+            treated_unit=0,
+            treat_period=15,
+        )

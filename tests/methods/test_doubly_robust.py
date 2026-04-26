@@ -46,3 +46,24 @@ def test_dr_consistent_with_naive_under_no_confounding() -> None:
         covariates=["motivation_proxy", "paid_channel"],
     )
     assert abs(out["effect_size"] - naive) < 0.01
+
+
+def test_dr_handles_imbalanced_treatment_via_stratified_kfold() -> None:
+    # Heavily imbalanced design (1% treated). Plain KFold can yield single-class folds;
+    # StratifiedKFold should keep the cross-fitter from crashing.
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(0)
+    n = 4_000
+    motivation = rng.normal(0, 1, n)
+    treated = (rng.uniform(size=n) < 0.01).astype(int)
+    outcome = 0.3 + 0.05 * treated + 0.1 * motivation + rng.normal(0, 0.1, n)
+    frame = pd.DataFrame({"treated": treated, "outcome": outcome, "motivation_proxy": motivation})
+    out = estimate_doubly_robust(
+        frame,
+        treatment="treated",
+        outcome="outcome",
+        covariates=["motivation_proxy"],
+    )
+    assert "effect_size" in out

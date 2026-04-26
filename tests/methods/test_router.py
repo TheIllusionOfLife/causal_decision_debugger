@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from causal_debugger.methods.router import RouterContext, context_from_spec, suggest_method
 
 
@@ -135,3 +137,34 @@ def test_context_from_spec_design_block_overrides_primary() -> None:
     )
     assert ctx.randomized is False
     assert ctx.has_instrument is True
+
+
+def test_router_cli_preserves_spec_derived_context_without_overrides(tmp_path) -> None:
+    import yaml
+
+    from causal_debugger.methods.router import main
+
+    spec = {
+        "analysis_id": "iv_test",
+        "status": "draft",
+        "business_decision": {"question": "?"},
+        "causal_question": {
+            "question": "?",
+            "unit": "user",
+            "treatment": {"name": "t", "type": "binary"},
+            "outcome": {"name": "y", "type": "binary"},
+            "comparison_group": "non-exposed",
+        },
+        "population": {"eligibility_definition": "all"},
+        "variables": {"pre_treatment_covariates": [], "forbidden_post_treatment_variables": []},
+        "assumptions": {},
+        "methods": {"primary": "instrumental_variables"},
+    }
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.safe_dump(spec))
+    out_path = tmp_path / "plan.json"
+    rc = main([str(spec_path), "--out", str(out_path)])
+    assert rc == 0
+    plan = json.loads(out_path.read_text())
+    # No CLI flags passed: spec-derived has_instrument=True should route to IV.
+    assert plan["primary_method"] == "instrumental_variables"

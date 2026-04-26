@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-AIPW ATE = +0.0642 (95% CI [+0.0511, +0.0773]) — doubly robust against propensity or outcome misspecification.
+AIPW ATE = +0.0644 (95% CI [+0.0513, +0.0775]) — doubly robust against propensity or outcome misspecification.
 
 **Confidence:** medium.
 
@@ -29,7 +29,7 @@ examples/onboarding_retention/data/observational.parquet
 
 ## Main Result
 
-Estimated **ATE = +0.0642 outcome_units** (95% CI [+0.0511, +0.0773]).
+Estimated **ATE = +0.0644 outcome_units** (95% CI [+0.0513, +0.0775]).
 
 Sample size: 20,000 (8,925 treated / 11,075 control).
 
@@ -49,8 +49,8 @@ Sample size: 20,000 (8,925 treated / 11,075 control).
 
 ## Robustness and Refutation Checks
 
-- **placebo_treatment** — `passed`. Shuffled treatment yields effect -0.0131; main estimate is +0.0642. (Δ vs main: -0.0773)
-- **subset_stability** — `passed`. Per-segment estimates: BR: +0.0552, DE: +0.0667, JP: +0.0723, US: +0.0641; max |Δ vs main| = 0.0090 (Δ vs main: +0.0090)
+- **placebo_treatment** — `passed`. Shuffled treatment yields effect -0.0130; main estimate is +0.0644. (Δ vs main: -0.0773)
+- **subset_stability** — `passed`. Per-segment estimates: BR: +0.0551, DE: +0.0660, JP: +0.0725, US: +0.0635; max |Δ vs main| = 0.0092 (Δ vs main: +0.0092)
 - **sensitivity_to_unobserved_confounding** — `warning`. E-value at point estimate ≈ 1.70; at CI bound ≈ 1.59. Higher E-values mean stronger confounding is needed to explain the effect away.
 
 ## Limitations

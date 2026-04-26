@@ -75,7 +75,11 @@ def _make_dispatch(spec: dict[str, Any]) -> dict[str, Any]:
             df, treatment=treat, outcome=outcome, covariates=covariates
         ),
         "difference_in_differences": lambda df: did.estimate_did(
-            df, group_col=cols["group"], post_col=cols["post"], outcome_col=outcome
+            df,
+            group_col=cols["group"],
+            post_col=cols["post"],
+            outcome_col=outcome,
+            period_col=cols["period"],
         ),
         "interrupted_time_series": lambda df: its.estimate_its(
             df, period_col=cols["period"], post_col=cols["post"], outcome_col=outcome

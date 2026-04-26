@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -254,34 +254,42 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("spec", type=Path, help="Path to causal_spec.yaml")
     parser.add_argument("--out", type=Path, default=None, help="Write method_plan.json")
-    parser.add_argument("--randomized", action="store_true")
-    parser.add_argument("--has-pre-period", action="store_true")
+    # Default=None for boolean flags so we can tell "user did not pass it" from "user
+    # explicitly set False" — that lets us preserve spec-derived context unless overridden.
+    parser.add_argument("--randomized", action="store_true", default=None)
+    parser.add_argument("--has-pre-period", action="store_true", default=None)
     parser.add_argument(
         "--rollout-pattern",
         choices=["single", "staggered", "single_unit", "aggregate_time_series"],
-        default="single",
+        default=None,
     )
-    parser.add_argument("--threshold-assignment", action="store_true")
-    parser.add_argument("--has-donor-pool", action="store_true")
-    parser.add_argument("--has-instrument", action="store_true")
-    parser.add_argument("--no-comparison-group", action="store_true")
-    parser.add_argument("--heterogeneous", action="store_true")
+    parser.add_argument("--threshold-assignment", action="store_true", default=None)
+    parser.add_argument("--has-donor-pool", action="store_true", default=None)
+    parser.add_argument("--has-instrument", action="store_true", default=None)
+    parser.add_argument("--no-comparison-group", action="store_true", default=None)
+    parser.add_argument("--heterogeneous", action="store_true", default=None)
     args = parser.parse_args(argv)
     spec = yaml.safe_load(args.spec.resolve().read_text(encoding="utf-8"))
     ctx = context_from_spec(spec)
-    ctx = RouterContext(
-        randomized=args.randomized,
-        has_pre_period=args.has_pre_period,
-        rollout_pattern=args.rollout_pattern,
-        threshold_assignment=args.threshold_assignment,
-        has_donor_pool=args.has_donor_pool,
-        has_instrument=args.has_instrument,
-        has_pre_treatment_covariates=ctx.has_pre_treatment_covariates,
-        has_comparison_group=(not args.no_comparison_group) and ctx.has_comparison_group,
-        heterogeneous_effect_question=args.heterogeneous,
-        sample_size=ctx.sample_size,
-        pre_treatment_covariate_count=ctx.pre_treatment_covariate_count,
-    )
+    overrides: dict[str, Any] = {}
+    if args.randomized is not None:
+        overrides["randomized"] = args.randomized
+    if args.has_pre_period is not None:
+        overrides["has_pre_period"] = args.has_pre_period
+    if args.rollout_pattern is not None:
+        overrides["rollout_pattern"] = args.rollout_pattern
+    if args.threshold_assignment is not None:
+        overrides["threshold_assignment"] = args.threshold_assignment
+    if args.has_donor_pool is not None:
+        overrides["has_donor_pool"] = args.has_donor_pool
+    if args.has_instrument is not None:
+        overrides["has_instrument"] = args.has_instrument
+    if args.no_comparison_group:
+        overrides["has_comparison_group"] = False
+    if args.heterogeneous is not None:
+        overrides["heterogeneous_effect_question"] = args.heterogeneous
+    if overrides:
+        ctx = replace(ctx, **overrides)
     plan = suggest_method(ctx)
     if args.out:
         out = args.out.resolve()

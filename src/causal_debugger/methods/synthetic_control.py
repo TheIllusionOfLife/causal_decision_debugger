@@ -62,6 +62,12 @@ def estimate_synthetic_control(
     treated_unit: Any,
     treat_period: int,
 ) -> dict[str, Any]:
+    duplicate_count = int(df.duplicated(subset=[unit_col, period_col]).sum())
+    if duplicate_count:
+        raise ValueError(
+            f"Synthetic control requires one row per (unit, period); "
+            f"found {duplicate_count} duplicate (unit, period) rows."
+        )
     panel = df.pivot_table(index=period_col, columns=unit_col, values=outcome_col).sort_index()
     if panel.isna().any().any():
         missing = int(panel.isna().sum().sum())

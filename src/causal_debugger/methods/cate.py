@@ -37,28 +37,52 @@ def estimate_cate(
     t = df[treatment].astype(int).values
     y = df[outcome].astype(float).values
 
-    mu1 = (
-        GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0)
-        .fit(x[t == 1], y[t == 1])
-        .predict(x)
-    )
-    mu0 = (
-        GradientBoostingRegressor(max_depth=3, n_estimators=200, random_state=0)
-        .fit(x[t == 0], y[t == 0])
-        .predict(x)
-    )
-    cate = mu1 - mu0
+    def _fit_t_learner(
+        x_train: np.ndarray,
+        t_train: np.ndarray,
+        y_train: np.ndarray,
+        x_eval: np.ndarray,
+        *,
+        n_estimators: int = 200,
+    ) -> np.ndarray:
+        treated_mask = t_train == 1
+        control_mask = t_train == 0
+        if treated_mask.sum() < 2 or control_mask.sum() < 2:
+            return np.full(len(x_eval), np.nan)
+        m1 = (
+            GradientBoostingRegressor(max_depth=3, n_estimators=n_estimators, random_state=0)
+            .fit(x_train[treated_mask], y_train[treated_mask])
+            .predict(x_eval)
+        )
+        m0 = (
+            GradientBoostingRegressor(max_depth=3, n_estimators=n_estimators, random_state=0)
+            .fit(x_train[control_mask], y_train[control_mask])
+            .predict(x_eval)
+        )
+        return m1 - m0
+
+    cate = _fit_t_learner(x, t, y, x)
     ate = float(np.mean(cate))
-    # Bootstrap CI on the ATE (resample CATEs across units). std(cate)/sqrt(n) would measure
-    # cross-unit heterogeneity, not estimator sampling uncertainty, so report a percentile CI.
+    # Full-refit bootstrap: resample (x, t, y) with replacement and re-fit both base
+    # learners. Captures nuisance-fit uncertainty rather than just in-sample CATE spread.
+    # Lighter base learners during bootstrap keep runtime tractable.
     rng = np.random.default_rng(0)
-    n = len(cate)
-    boot_means = np.array(
-        [float(np.mean(cate[rng.integers(0, n, n)])) for _ in range(200)],
-        dtype=float,
-    )
-    ci_low = float(np.quantile(boot_means, 0.025))
-    ci_high = float(np.quantile(boot_means, 0.975))
+    n = len(t)
+    n_boot = 30
+    boot_means: list[float] = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        boot_cate = _fit_t_learner(x[idx], t[idx], y[idx], x, n_estimators=50)
+        if not np.isnan(boot_cate).any():
+            boot_means.append(float(np.mean(boot_cate)))
+    if len(boot_means) >= 5:
+        boot_arr = np.asarray(boot_means, dtype=float)
+        ci_low = float(np.quantile(boot_arr, 0.025))
+        ci_high = float(np.quantile(boot_arr, 0.975))
+    else:
+        # Fall back to a wide percentile of in-sample CATEs when too few bootstraps converged.
+        ci_low = float(np.quantile(cate, 0.025))
+        ci_high = float(np.quantile(cate, 0.975))
 
     cate_std = float(np.std(cate))
     diagnostics: dict[str, Any] = {

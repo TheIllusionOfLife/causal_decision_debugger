@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 
@@ -24,8 +24,14 @@ def _cross_fit_nuisances(
     p = np.zeros(n)
     mu1 = np.zeros(n)
     mu0 = np.zeros(n)
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    for train_idx, test_idx in kf.split(x):
+    # Stratify on treatment so every fold has both classes; cap splits by minority count
+    # so logistic regression always sees both labels in training.
+    minority = int(min((t == 0).sum(), (t == 1).sum()))
+    if minority < 2:
+        raise ValueError("Cross-fitting requires at least 2 treated and 2 control units.")
+    effective_splits = max(2, min(n_splits, minority))
+    kf = StratifiedKFold(n_splits=effective_splits, shuffle=True, random_state=seed)
+    for train_idx, test_idx in kf.split(x, t):
         x_tr, x_te = x[train_idx], x[test_idx]
         t_tr = t[train_idx]
         y_tr = y[train_idx]
