@@ -39,10 +39,17 @@ def main() -> None:
     df["signup_week"] = "2026-W10"
     out_path = args.out_dir / "observational.parquet"
     df.to_parquet(out_path, index=False)
+    import json
+
     truth_path = args.out_dir / "truth.json"
     truth_path.write_text(
-        '{"true_ate": %s, "expected_status": "%s"}\n'
-        % (scenario.truth["true_ate"], scenario.truth["expected_status"])
+        json.dumps(
+            {
+                "true_ate": scenario.truth["true_ate"],
+                "expected_status": scenario.truth["expected_status"],
+            }
+        )
+        + "\n"
     )
     print(f"wrote {out_path} ({len(df)} rows)")
 
