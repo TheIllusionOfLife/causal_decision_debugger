@@ -1,0 +1,57 @@
+analysis_id: REPLACE_ME
+status: draft
+created_by: causal-decision-debugger
+
+business_decision:
+  question: "What decision are we trying to make?"
+  owner: null
+  action_options: []
+
+causal_question:
+  question: "What is the effect of <treatment> on <outcome>?"
+  unit: user
+  treatment:
+    name: REPLACE_ME
+    type: binary
+    treatment_time: null
+  outcome:
+    name: REPLACE_ME
+    type: binary
+    outcome_window: null
+  comparison_group: "REPLACE_ME"
+
+population:
+  eligibility_definition: "REPLACE_ME"
+  inclusion_criteria: []
+  exclusion_criteria: []
+
+data:
+  warehouse: local
+  project: null
+  dataset: null
+  population_query: null
+  treatment_outcome_query: null
+  covariate_query: null
+  local_path: null
+
+variables:
+  pre_treatment_covariates: []
+  forbidden_post_treatment_variables: []
+  suspected_unobserved_confounders: []
+
+assumptions:
+  no_unobserved_confounding:
+    status: unknown
+  treatment_precedes_outcome:
+    status: unknown
+  no_simultaneous_major_change:
+    status: unknown
+  positivity_overlap:
+    status: unknown
+  stable_unit_treatment_value:
+    status: unknown
+
+methods:
+  primary: null
+  secondary: []
+  robustness: []
