@@ -4,23 +4,28 @@ A Claude Code Skill plus Python toolkit that helps teams move from correlation-b
 
 ## What you get
 
-- **Claude Code Skill** under `.claude/skills/causal-decision-debugger/` with subagents for data discovery, SQL safety review, methodology, assumption ledgering, and report writing.
+- **Claude Code plugin** (`skills/causal-decision-debugger/` + `agents/`) with subagents for data discovery, SQL safety review, methodology, assumption ledgering, and report writing.
 - **Deterministic Python scripts** for spec validation, EDA, timestamp checks, covariate balance, method routing, and report rendering.
 - **Causal estimators** covering A/B test analysis, difference-in-differences, interrupted time series, propensity weighting, matching, doubly robust estimation, CATE/causal forests, synthetic control, instrumental variables, and regression discontinuity.
 - **Refutation suite** including placebo tests, subset stability, and sensitivity to unobserved confounding.
 - **End-to-end example** under `examples/onboarding_retention/` that runs the full pipeline on synthetic data.
 
-## Install
+## Install (Claude Code plugin)
 
-```bash
-uv sync --extra dev
+In Claude Code:
+
+```text
+/plugin marketplace add github:TheIllusionOfLife/causal_decision_debugger
+/plugin install causal-decision-debugger
 ```
 
-The package targets Python 3.11+. `uv` resolves and installs `pandas`, `numpy`, `scipy`, `scikit-learn`, `statsmodels`, `linearmodels`, `dowhy`, `econml`, `pyyaml`, `jinja2`, and `jsonschema`.
+The plugin bundles the `causal_debugger` Python wheel under `skills/causal-decision-debugger/vendor/`. On first invocation, Claude will run a stdlib-only `bootstrap.py` that installs the wheel via `uv tool install`, `pipx`, or `pip --user` (whichever is available).
+
+**Network required on first run.** The bundled wheel is `causal_debugger` itself; transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `statsmodels`, `linearmodels`, `dowhy`, `econml`, `pyyaml`, `jinja2`, `jsonschema`, `pyarrow`) still resolve from PyPI on first install. Subsequent runs are fully offline. Python 3.11+.
 
 ## Use it inside Claude Code
 
-In a project that has this repo's `.claude/` copied into it, ask:
+After install, ask Claude:
 
 > Use the causal decision debugger to investigate whether onboarding_v2 improved D7 retention. Do not export PII. Generate a business report and technical appendix.
 
@@ -35,17 +40,28 @@ The Skill will produce:
 ## Run the example pipeline
 
 ```bash
-uv run python .claude/skills/causal-decision-debugger/scripts/run_pipeline.py \
-    examples/onboarding_retention
+causal-debugger pipeline examples/onboarding_retention
 ```
 
-This regenerates synthetic data, validates the spec, runs balance and timestamp checks, picks a method, estimates the effect, runs refutation, and renders `report.md`.
+This validates the spec, runs balance and timestamp checks, picks a method, estimates the effect, runs refutation, and renders `report.md`. (If `data/` is missing under the example, regenerate it via `python examples/onboarding_retention/generate_synthetic.py`.)
+
+## Develop
+
+```bash
+uv sync --extra dev    # set up dev environment
+uv run pytest          # full test suite
+uv run ruff check .    # lint
+uv build               # build the wheel into dist/
+```
+
+When developing in this repo, the `.claude/skills/` and `.claude/agents/` symlinks (gitignored) point at the top-level `skills/` and `agents/` so Claude Code finds the assets. Re-run `uv build && cp dist/*.whl skills/causal-decision-debugger/vendor/` after changes to the Python package, and regenerate `vendor/manifest.json` (CI's manifest check will fail otherwise).
 
 ## Repository layout
 
 ```
-.claude/skills/causal-decision-debugger/   Skill markdown, references, templates, script shims
-.claude/agents/                            Subagent definitions
+.claude-plugin/                            plugin.json + marketplace.json
+skills/causal-decision-debugger/           SKILL.md, reference docs, templates, vendored wheel, bootstrap.py
+agents/                                    Subagent definitions (5 agents)
 src/causal_debugger/                       Importable package backing the scripts
   schemas/                                 JSON schemas for artifacts
   spec/                                    Spec validation
