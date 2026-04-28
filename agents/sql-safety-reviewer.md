@@ -18,7 +18,7 @@ Check SQL for:
 - Missing eligibility definition.
 - Missing comparison group.
 
-Reference rules in `.claude/skills/causal-decision-debugger/reference/sql-safety-rules.md`.
+Reference rules in `${CLAUDE_PLUGIN_ROOT}/skills/causal-decision-debugger/reference/sql-safety-rules.md`.
 
 Output YAML:
 

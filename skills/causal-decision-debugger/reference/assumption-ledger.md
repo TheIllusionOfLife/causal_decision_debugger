@@ -27,4 +27,4 @@ Every causal claim depends on assumptions. The ledger is how the system makes th
 - `risk_if_false` — what breaks if the assumption fails.
 - `how_to_check_or_improve` — actionable next step.
 
-The schema lives at `src/causal_debugger/schemas/assumption_ledger.schema.json`.
+The schema is bundled inside the `causal_debugger` Python package and is enforced when the ledger is loaded by the pipeline.

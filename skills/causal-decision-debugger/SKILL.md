@@ -10,16 +10,28 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 
 Help users move from correlation-based claims to careful causal claims with explicit assumptions, data checks, estimates, robustness checks, and recommended next actions.
 
+## Setup (first run only)
+
+The skill ships a bundled Python wheel. Before running any deterministic script, ask the user for permission to bootstrap, then execute:
+
+```bash
+python ${CLAUDE_PLUGIN_ROOT}/skills/causal-decision-debugger/scripts/bootstrap.py
+```
+
+Bootstrap is idempotent (skips if already installed) and stdlib-only. It tries `uv tool install`, then `pipx`, then `pip --user`. **Network access is required on the first run** to resolve heavy transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `dowhy`, `econml`) from PyPI; the bundled wheel only contains `causal_debugger` itself.
+
+After success, the `causal-debugger` CLI is on the user's `$PATH`.
+
 ## Required workflow
 
 1. Clarify the decision and causal question.
-2. Create or update `causal_spec.yaml` (must validate against `src/causal_debugger/schemas/causal_spec.schema.json`).
+2. Create or update `causal_spec.yaml` and validate it via `causal-debugger validate-spec <path>`.
 3. Identify unit, treatment, outcome, treatment time, outcome window, and comparison group.
 4. Inspect available data through existing project tools.
-5. Check timestamp order and leakage risk.
+5. Check timestamp order and leakage risk via `causal-debugger check-timestamps`.
 6. Identify pre-treatment covariates and forbidden post-treatment variables.
-7. Build `assumption_ledger.yaml` (validates against `src/causal_debugger/schemas/assumption_ledger.schema.json`).
-8. Select a method and write `method_plan.json`.
+7. Build `assumption_ledger.yaml` (its schema is enforced by the same CLI).
+8. Select a method via `causal-debugger suggest-method` and write `method_plan.json`.
 9. Generate safe SQL drafts when needed; route via the `sql-safety-reviewer` agent.
 10. Ask the user before running expensive or risky queries.
 11. Run EDA, balance checks, estimation, and robustness checks where possible.
@@ -42,7 +54,7 @@ Help users move from correlation-based claims to careful causal claims with expl
 
 ## Subagents
 
-Delegate to these subagents (defined under `.claude/agents/`):
+Delegate to these subagents (bundled with the plugin under `agents/`):
 
 - `data-scout` — find candidate data sources.
 - `sql-safety-reviewer` — review SQL for safety and causal correctness.
@@ -50,17 +62,18 @@ Delegate to these subagents (defined under `.claude/agents/`):
 - `assumption-ledger-agent` — maintain the assumption ledger.
 - `report-writer` — author the business report and appendix.
 
-## Deterministic scripts
+## Deterministic CLI
 
-Invoke via `uv run python -m causal_debugger.<module> ...` (CWD-independent). Convenience shims live in `.claude/skills/causal-decision-debugger/scripts/`:
+After bootstrap, invoke via the `causal-debugger` console script (CWD-independent):
 
-- `validate_causal_spec.py` — schema validation + cross-field rules.
-- `profile_dataframe.py` — missingness, cardinality, timestamp ranges.
-- `check_timestamps.py` — confirms treatment time precedes outcome time.
-- `check_balance.py` — covariate balance / SMD.
-- `suggest_method.py` — method routing per spec §10.
-- `generate_report.py` — render `report.md` from artifacts.
-- `run_pipeline.py` — full orchestration.
+- `causal-debugger validate-spec <causal_spec.yaml>` — schema validation + cross-field rules.
+- `causal-debugger profile <data.parquet>` — missingness, cardinality, timestamp ranges.
+- `causal-debugger check-timestamps <data.parquet>` — confirms treatment time precedes outcome time.
+- `causal-debugger check-balance <data.parquet>` — covariate balance / SMD.
+- `causal-debugger suggest-method <causal_spec.yaml>` — method routing per spec §10.
+- `causal-debugger report <analysis_dir>` — render `report.md` from artifacts.
+- `causal-debugger pipeline <analysis_dir>` — full orchestration.
+- `causal-debugger doctor` — environment diagnostics for bug reports.
 
 ## Output artifacts
 
