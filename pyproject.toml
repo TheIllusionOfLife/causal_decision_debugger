@@ -27,6 +27,9 @@ dependencies = [
     "pyarrow>=15.0",
 ]
 
+[project.scripts]
+causal-debugger = "causal_debugger.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
@@ -41,6 +44,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/causal_debugger"]
+
+# Hatchling already picks up package data files when packages= is set, but be
+# explicit so a future repo move or build-tool change cannot silently drop the
+# JSON schemas — they are loaded at runtime via importlib.resources.
+[tool.hatch.build.targets.wheel.force-include]
+"src/causal_debugger/schemas/causal_spec.schema.json" = "causal_debugger/schemas/causal_spec.schema.json"
+"src/causal_debugger/schemas/assumption_ledger.schema.json" = "causal_debugger/schemas/assumption_ledger.schema.json"
+"src/causal_debugger/schemas/estimate_result.schema.json" = "causal_debugger/schemas/estimate_result.schema.json"
+"src/causal_debugger/schemas/identifiability_failure.schema.json" = "causal_debugger/schemas/identifiability_failure.schema.json"
+"src/causal_debugger/schemas/refutation_result.schema.json" = "causal_debugger/schemas/refutation_result.schema.json"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/causal_debugger", "README.md", "LICENSE"]

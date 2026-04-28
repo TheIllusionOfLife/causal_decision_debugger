@@ -1,4 +1,4 @@
-"""Templates shipped under .claude/skills/.../templates/ must validate against their schemas."""
+"""Templates shipped under skills/causal-decision-debugger/templates/ must validate against their schemas."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 from causal_debugger.schemas import load_schema
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATES = REPO_ROOT / ".claude" / "skills" / "causal-decision-debugger" / "templates"
+TEMPLATES = REPO_ROOT / "skills" / "causal-decision-debugger" / "templates"
 
 
 def _load_yaml(path: Path) -> object:
