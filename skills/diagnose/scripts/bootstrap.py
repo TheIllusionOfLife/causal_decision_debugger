@@ -164,9 +164,16 @@ def bootstrap_lock(data_dir: Path, *, blocking: bool = True) -> Iterator[None]:
     """
     data_dir.mkdir(parents=True, exist_ok=True)
     lock_path = data_dir / ".bootstrap.lock"
-    fh = lock_path.open("w")
+    # "a" instead of "w": Windows msvcrt.locking refuses to truncate a
+    # file already locked by another process, so opening "w" here would
+    # raise PermissionError before we ever reach the locking call.
+    fh = lock_path.open("a")
     try:
         if sys.platform == "win32":
+            # msvcrt.locking locks LOCKLEN bytes from the current file pointer;
+            # in append mode the pointer is at EOF, so seek to 0 to ensure all
+            # processes lock the same byte range.
+            fh.seek(0)
             mode = msvcrt.LK_NBLCK if not blocking else msvcrt.LK_LOCK
             try:
                 msvcrt.locking(fh.fileno(), mode, 1)
@@ -187,6 +194,21 @@ def bootstrap_lock(data_dir: Path, *, blocking: bool = True) -> Iterator[None]:
             fh.close()
 
 
+def _run(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[str] | int:
+    """Run a subprocess and route TimeoutExpired/OSError to a clean _die.
+
+    Returns the CompletedProcess on success, or an int exit code if the
+    subprocess machinery itself failed (binary missing, timed out). Callers
+    should check `isinstance(result, int)` and propagate the int upward.
+    """
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        return _die(f"command timed out after {timeout}s: {' '.join(cmd)}")
+    except OSError as exc:
+        return _die(f"could not execute {cmd[0]}: {exc}")
+
+
 def _create_venv(data_dir: Path, *, clear: bool) -> int:
     venv_dir = data_dir / "venv"
     cmd = [sys.executable, "-m", "venv"]
@@ -194,7 +216,9 @@ def _create_venv(data_dir: Path, *, clear: bool) -> int:
         cmd.append("--clear")
     cmd.append(str(venv_dir))
     print(f"bootstrap: {'recreating' if clear else 'creating'} venv at {venv_dir}", file=sys.stderr)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+    result = _run(cmd, timeout=120)
+    if isinstance(result, int):
+        return result
     if result.returncode != 0:
         return _die(
             f"`python -m venv {venv_dir}` failed (exit {result.returncode}):\n"
@@ -205,9 +229,14 @@ def _create_venv(data_dir: Path, *, clear: bool) -> int:
 
 def _install_wheel(data_dir: Path, wheel: Path) -> int:
     python, _ = venv_paths(data_dir)
-    cmd = [str(python), "-m", "pip", "install", str(wheel)]
+    # --force-reinstall is defense-in-depth: the stale-venv `--clear` path above
+    # already wipes the venv, but if that ever has an edge case, this prevents
+    # pip from no-op'ing on a same-version "Requirement already satisfied".
+    cmd = [str(python), "-m", "pip", "install", "--force-reinstall", str(wheel)]
     print(f"bootstrap: installing {wheel.name} (this is the slow step)", file=sys.stderr)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, check=False)
+    result = _run(cmd, timeout=3600)
+    if isinstance(result, int):
+        return result
     if result.returncode != 0:
         tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-30:])
         return _die(f"pip install failed (exit {result.returncode}):\n{tail}")
@@ -218,9 +247,9 @@ def _smoke_test(data_dir: Path, manifest: dict) -> int:
     _, cli = venv_paths(data_dir)
     if not cli.exists():
         return _die(f"installed venv is missing {cli}")
-    result = subprocess.run(
-        [str(cli), "doctor"], capture_output=True, text=True, timeout=30, check=False
-    )
+    result = _run([str(cli), "doctor"], timeout=30)
+    if isinstance(result, int):
+        return result
     if result.returncode != 0:
         return _die(
             f"`causal-debugger doctor` failed (exit {result.returncode}):\n"
@@ -259,11 +288,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         manifest = read_manifest()
-        wheel = _wheel_path(manifest)
         required = ("wheel", "sha256", "metadata_sha256", "version")
         missing = [k for k in required if k not in manifest]
         if missing:
             raise KeyError(f"manifest is missing required keys: {missing}")
+        wheel = _wheel_path(manifest)
     except FileNotFoundError as exc:
         return _die(str(exc))
     except json.JSONDecodeError as exc:

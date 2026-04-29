@@ -34,7 +34,7 @@ jobs:
           python-version: "3.11"
 
       - name: Set up Node.js (for claude plugin validate)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -85,17 +85,25 @@ jobs:
                   return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
           def payload_hash(wheel: Path) -> str:
-              # Deterministic hash of the package payload (causal_debugger/*) to catch
-              # code-only changes that leave METADATA byte-identical. Excludes .dist-info
-              # because RECORD/WHEEL/timestamps can shift between rebuilds.
+              # Deterministic hash of the package payload to catch code-only or
+              # console-script changes that leave METADATA byte-identical.
+              # Includes causal_debugger/* (source) and entry_points.txt (console
+              # script bindings). Excludes RECORD/WHEEL because they can shift
+              # with hatchling timestamps.
               with zipfile.ZipFile(wheel) as zf:
                   names = sorted(
                       n for n in zf.namelist()
-                      if n.startswith("causal_debugger/") and not n.endswith("/")
+                      if (n.startswith("causal_debugger/") and not n.endswith("/"))
+                      or n.endswith(".dist-info/entry_points.txt")
                   )
                   h = hashlib.sha256()
                   for n in names:
-                      h.update(n.encode("utf-8"))
+                      # Strip the version-bearing dist-info prefix so a no-op
+                      # version bump doesn't trip the cross-rebuild equivalence
+                      # check; keep the basename to detect entry_points.txt
+                      # additions/removals.
+                      logical = n.split(".dist-info/")[-1] if ".dist-info/" in n else n
+                      h.update(logical.encode("utf-8"))
                       h.update(b"\0")
                       h.update(zf.read(n))
                       h.update(b"\0")
