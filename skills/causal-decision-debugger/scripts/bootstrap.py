@@ -6,8 +6,10 @@ beyond Python 3.11+. It tries ``uv tool install`` → ``pipx install`` →
 ``python -m pip install --user`` in order, and verifies that the
 ``causal-debugger`` console script is reachable on ``$PATH`` afterwards.
 
-Idempotent: if the bundled wheel's SHA256 matches what is already installed,
-exits 0 without re-installing.
+Idempotent: skips installation when ``causal-debugger doctor`` already
+reports the bundled version *and* schemas are resolvable. ``doctor`` exits
+non-zero when schemas cannot be loaded, so a corrupted install at the same
+version is detected here instead of being silently accepted.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import site
 import subprocess
 import sys
 from pathlib import Path
@@ -70,20 +73,29 @@ def _verify_manifest(manifest: dict, wheel: Path) -> int | None:
 
 
 def _existing_install() -> tuple[str | None, str | None]:
-    """Return (cli_path, version) if causal-debugger is already callable."""
+    """Return (cli_path, version) if causal-debugger is callable AND healthy.
+
+    Health is decided by ``causal-debugger doctor``: if the schemas can't be
+    loaded (a corrupted install), doctor exits non-zero and we treat the
+    install as broken so the bootstrap re-installs instead of accepting it.
+    """
     cli = shutil.which("causal-debugger")
     if cli is None:
         return None, None
     try:
         out = subprocess.run(
-            [cli, "--version"], capture_output=True, text=True, timeout=15, check=False
+            [cli, "doctor"], capture_output=True, text=True, timeout=15, check=False
         )
     except (OSError, subprocess.TimeoutExpired):
         return cli, None
     if out.returncode != 0:
         return cli, None
-    parts = out.stdout.strip().split()
-    return cli, parts[-1] if parts else None
+    try:
+        info = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        return cli, None
+    version = info.get("package_version")
+    return cli, version if isinstance(version, str) else None
 
 
 def _try_install(cmd: list[str]) -> tuple[bool, str]:
@@ -99,30 +111,36 @@ def _try_install(cmd: list[str]) -> tuple[bool, str]:
 
 
 def _install_attempts(wheel: Path) -> list[list[str]]:
+    """Install commands tried in order.
+
+    ``--python sys.executable`` (rather than a hard-coded "3.11") so users on
+    Python 3.12+ also work — the script's own version guard already enforces
+    the 3.11 floor. ``--force`` / ``--upgrade`` ensure the existing install is
+    replaced when the bundled wheel version moves forward instead of silently
+    falling through to the next installer and leaving two copies on disk.
+    """
+    py = sys.executable
     attempts: list[list[str]] = []
     if shutil.which("uv"):
-        attempts.append(["uv", "tool", "install", "--python", "3.11", str(wheel)])
+        attempts.append(["uv", "tool", "install", "--force", "--python", py, str(wheel)])
     if shutil.which("pipx"):
-        attempts.append(["pipx", "install", "--python", "python3.11", str(wheel)])
-    attempts.append([sys.executable, "-m", "pip", "install", "--user", str(wheel)])
+        attempts.append(["pipx", "install", "--force", "--python", py, str(wheel)])
+    attempts.append([py, "-m", "pip", "install", "--user", "--upgrade", str(wheel)])
     return attempts
 
 
 def _user_base_bin() -> Path:
-    if sys.platform == "darwin":
-        # pip --user lands here on stock macOS Python.
-        return (
-            Path.home()
-            / "Library"
-            / "Python"
-            / f"{sys.version_info.major}.{sys.version_info.minor}"
-            / "bin"
-        )
-    return Path.home() / ".local" / "bin"
+    """Where ``pip install --user`` puts console scripts.
+
+    ``site.getuserbase()`` already encodes the platform-specific layout
+    (``~/Library/Python/X.Y`` on stock macOS, ``~/.local`` on Linux), so
+    delegating to it avoids a hand-rolled platform check.
+    """
+    return Path(site.getuserbase()) / "bin"
 
 
 def _post_install_check(expected_version: str) -> int:
-    cli, version = _existing_install()
+    cli = shutil.which("causal-debugger")
     if cli is None:
         bin_dir = _user_base_bin()
         return _die(
@@ -131,10 +149,18 @@ def _post_install_check(expected_version: str) -> int:
             f'  export PATH="{bin_dir}:$PATH"\n'
             "Then re-run this bootstrap."
         )
+    cli, version = _existing_install()
+    if version is None:
+        return _die(
+            f"installed at {cli} but `causal-debugger doctor` failed.\n"
+            "Run it directly to see the error; a re-bootstrap may be needed."
+        )
     if version != expected_version:
-        print(
-            f"bootstrap: warning — installed version {version} differs from bundled {expected_version}",
-            file=sys.stderr,
+        return _die(
+            f"installed version {version} does not match bundled {expected_version}.\n"
+            f"Likely an older `causal-debugger` is shadowing on $PATH at {cli}.\n"
+            "Uninstall the previous copy (`uv tool uninstall causal-debugger` or "
+            "`pipx uninstall causal-debugger`) and re-run this bootstrap."
         )
     print(f"READY: causal-debugger {version} at {cli}")
     return 0
@@ -166,13 +192,17 @@ def main() -> int:
         ok, out = _try_install(cmd)
         if ok:
             return _post_install_check(manifest["version"])
-        failures.append(
-            (" ".join(cmd), out.strip().splitlines()[-1] if out.strip() else "<no output>")
-        )
+        failures.append((" ".join(cmd), out))
 
+    # Keep the last ~20 lines of each installer's output. Pip/uv dependency
+    # resolution errors are usually multi-line (resolver trace + the actual
+    # conflict), and a single-line tail loses the context a user needs.
     print("bootstrap: every install method failed:", file=sys.stderr)
-    for cmd_str, last in failures:
-        print(f"  - {cmd_str}\n      {last}", file=sys.stderr)
+    for cmd_str, output in failures:
+        print(f"  - {cmd_str}", file=sys.stderr)
+        lines = output.strip().splitlines() if output.strip() else ["<no output>"]
+        for line in lines[-20:]:
+            print(f"      {line}", file=sys.stderr)
     return 1
 
 

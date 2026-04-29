@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
-import os
 import shutil
+import site
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -68,7 +68,10 @@ def _doctor(_: list[str]) -> int:
         "python_executable": sys.executable,
         "causal_debugger_cli_on_path": cli_path,
         "platform": sys.platform,
-        "user_base_bin": str(Path(os.path.expanduser("~")) / ".local" / "bin"),
+        # ``site.getuserbase()`` resolves the platform-specific pip --user
+        # location: ``~/.local`` on Linux, ``~/Library/Python/X.Y`` on stock
+        # macOS Python. The hand-rolled ``~/.local/bin`` was wrong on macOS.
+        "user_base_bin": str(Path(site.getuserbase()) / "bin"),
     }
     try:
         from causal_debugger.schemas import load_schema
@@ -78,8 +81,12 @@ def _doctor(_: list[str]) -> int:
     except Exception as exc:
         info["schemas_resolvable"] = False
         info["schemas_error"] = repr(exc)
-    print(json.dumps(info, indent=2, sort_keys=True))
-    return 0
+    # ``allow_nan=False`` matches the pipeline's strict-JSON convention so a
+    # surprise NaN/Inf in any future doctor field fails loudly. Exit non-zero
+    # when schemas can't load — bootstrap relies on this to detect a corrupted
+    # install at the same version string.
+    print(json.dumps(info, indent=2, sort_keys=True, allow_nan=False))
+    return 0 if info["schemas_resolvable"] else 1
 
 
 def main(argv: list[str] | None = None) -> int:

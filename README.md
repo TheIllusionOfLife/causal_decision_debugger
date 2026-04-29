@@ -43,7 +43,7 @@ The Skill will produce:
 causal-debugger pipeline examples/onboarding_retention
 ```
 
-This validates the spec, runs balance and timestamp checks, picks a method, estimates the effect, runs refutation, and renders `report.md`. (If `data/` is missing under the example, regenerate it via `python examples/onboarding_retention/generate_synthetic.py`.)
+This validates the spec, runs balance and timestamp checks, picks a method, estimates the effect, runs refutation, and renders `report.md`. If `data/` is missing under the example, regenerate it via `uv run python examples/onboarding_retention/generate_synthetic.py` (the script imports `causal_debugger`, so a bare `python` from outside a `uv sync` checkout will not find it; from a plugin-only install, run `causal-debugger doctor` and use the reported `python_executable`).
 
 ## Develop
 

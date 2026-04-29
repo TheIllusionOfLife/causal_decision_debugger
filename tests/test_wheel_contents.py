@@ -49,7 +49,11 @@ def test_wheel_includes_schemas(tmp_path: Path) -> None:
 
     # Console script entry must be declared so `causal-debugger` becomes
     # available after install. This is what bootstrap.py greps for.
-    metadata = next(n for n in names if n.endswith(".dist-info/entry_points.txt"))
+    entry_paths = [n for n in names if n.endswith(".dist-info/entry_points.txt")]
+    assert entry_paths, (
+        f"wheel is missing .dist-info/entry_points.txt; without it the "
+        f"`causal-debugger` console script never gets registered. names={sorted(names)}"
+    )
     with zipfile.ZipFile(wheels[0]) as zf:
-        entry_text = zf.read(metadata).decode()
+        entry_text = zf.read(entry_paths[0]).decode()
     assert "causal-debugger = causal_debugger.cli:main" in entry_text, entry_text
