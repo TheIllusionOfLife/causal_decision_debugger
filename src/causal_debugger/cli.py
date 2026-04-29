@@ -12,7 +12,6 @@ import hashlib
 import importlib.metadata
 import json
 import shutil
-import site
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -83,16 +82,20 @@ def _installed_metadata_sha256() -> str | None:
 
 def _doctor(_: list[str]) -> int:
     cli_path = shutil.which("causal-debugger") or "<not on PATH>"
+    # ``sys.executable`` is the venv's python under the canonical install
+    # model (``${CLAUDE_PLUGIN_DATA}/venv/bin/python``). Reporting the venv
+    # root lets bug reports show whether ``causal-debugger`` is dispatching
+    # from the plugin venv or some other Python. Don't ``resolve()`` first —
+    # that follows the symlink to the underlying Python install (e.g.
+    # ``/opt/homebrew/.../python@3.11/...``) instead of the venv directory.
+    venv_root = str(Path(sys.executable).parent.parent)
     info: dict[str, Any] = {
         "package_version": _package_version(),
         "python_version": sys.version.split()[0],
         "python_executable": sys.executable,
+        "venv_root": venv_root,
         "causal_debugger_cli_on_path": cli_path,
         "platform": sys.platform,
-        # ``site.getuserbase()`` resolves the platform-specific pip --user
-        # location: ``~/.local`` on Linux, ``~/Library/Python/X.Y`` on stock
-        # macOS Python. The hand-rolled ``~/.local/bin`` was wrong on macOS.
-        "user_base_bin": str(Path(site.getuserbase()) / "bin"),
         "metadata_sha256": _installed_metadata_sha256(),
     }
     try:

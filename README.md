@@ -4,7 +4,7 @@ A Claude Code Skill plus Python toolkit that helps teams move from correlation-b
 
 ## What you get
 
-- **Claude Code plugin** (`skills/causal-decision-debugger/` + `agents/`) with subagents for data discovery, SQL safety review, methodology, assumption ledgering, and report writing.
+- **Claude Code plugin** (`skills/diagnose/` + `agents/`) with subagents for data discovery, SQL safety review, methodology, assumption ledgering, and report writing.
 - **Deterministic Python scripts** for spec validation, EDA, timestamp checks, covariate balance, method routing, and report rendering.
 - **Causal estimators** covering A/B test analysis, difference-in-differences, interrupted time series, propensity weighting, matching, doubly robust estimation, CATE/causal forests, synthetic control, instrumental variables, and regression discontinuity.
 - **Refutation suite** including placebo tests, subset stability, and sensitivity to unobserved confounding.
@@ -19,9 +19,11 @@ In Claude Code:
 /plugin install causal-decision-debugger
 ```
 
-The plugin bundles the `causal_debugger` Python wheel under `skills/causal-decision-debugger/vendor/`. On first invocation, Claude will run a stdlib-only `bootstrap.py` that installs the wheel via `uv tool install`, `pipx`, or `pip --user` (whichever is available).
+The plugin bundles the `causal_debugger` Python wheel under `skills/diagnose/vendor/`. On first invocation, Claude will run a stdlib-only `bootstrap.py` that creates an isolated virtualenv at `${CLAUDE_PLUGIN_DATA}/venv/` (the per-plugin persistent data dir) and `pip install`s the bundled wheel into it. Inside Claude Code, the plugin's `bin/causal-debugger` shim is auto-on-PATH and dispatches into the venv. Outside Claude Code, invoke the venv's binary directly (`~/.claude/plugins/data/causal-decision-debugger*/venv/bin/causal-debugger`) or add it to your shell PATH.
 
-**Network required on first run.** The bundled wheel is `causal_debugger` itself; transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `statsmodels`, `linearmodels`, `dowhy`, `econml`, `pyyaml`, `jinja2`, `jsonschema`, `pyarrow`) still resolve from PyPI on first install. Subsequent runs are fully offline. Python 3.11+.
+**Network required on first run.** The bundled wheel is `causal_debugger` itself; transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `statsmodels`, `linearmodels`, `dowhy`, `econml`, `pyyaml`, `jinja2`, `jsonschema`, `pyarrow`) still resolve from PyPI on first install. The first install downloads ~500 MB and takes 5-30 minutes; subsequent runs are instant. Python 3.11+.
+
+**Windows note.** The `bin/causal-debugger` shim relies on a Unix-style shebang and executable bit. On Windows the venv is still created (under `${CLAUDE_PLUGIN_DATA}\venv\Scripts\`), but if the bin/ shim doesn't auto-resolve via Claude Code's Bash tool, invoke `python skills/diagnose/scripts/bootstrap.py` and then call the venv's `causal-debugger.exe` directly.
 
 ## Use it inside Claude Code
 
@@ -54,14 +56,32 @@ uv run ruff check .    # lint
 uv build               # build the wheel into dist/
 ```
 
-When developing in this repo, the `.claude/skills/` and `.claude/agents/` symlinks (gitignored) point at the top-level `skills/` and `agents/` so Claude Code finds the assets. Re-run `uv build && cp dist/*.whl skills/causal-decision-debugger/vendor/` after changes to the Python package, and regenerate `vendor/manifest.json` (CI's manifest check will fail otherwise).
+Two ways to load the plugin during development:
+
+- **Symlinks** (already wired up in this repo): `.claude/skills/diagnose -> ../../skills/diagnose` and `.claude/agents -> ../agents`. Both are gitignored. Claude Code picks them up when you launch from this directory.
+- **`--plugin-dir` flag**: `claude --plugin-dir .` from the repo root. Doesn't require symlinks — useful for one-off testing in a clean directory.
+
+After editing `SKILL.md`, an agent file, or the manifest, run `/reload-plugins` inside Claude Code to pick up changes without restarting.
+
+After modifying `src/causal_debugger/`, rebuild the bundled wheel and refresh its manifest so the install-test CI does not fail:
+
+```bash
+uv build
+cp dist/causal_debugger-*.whl skills/diagnose/vendor/
+# Regenerate sha256 + metadata_sha256 in skills/diagnose/vendor/manifest.json
+```
+
+## Release
+
+To publish the plugin to the official Anthropic marketplace, submit it via [`https://claude.ai/settings/plugins/submit`](https://claude.ai/settings/plugins/submit). The marketplace entry already lives in `.claude-plugin/marketplace.json`; tag a release with `claude plugin tag --push` (see [Plugins reference](https://code.claude.com/docs/plugins-reference#plugin-tag)).
 
 ## Repository layout
 
 ```text
 .claude-plugin/                            plugin.json + marketplace.json
-skills/causal-decision-debugger/           SKILL.md, reference docs, templates, vendored wheel, bootstrap.py
+skills/diagnose/                           SKILL.md, reference docs, templates, vendored wheel, bootstrap.py, _install_paths.py
 agents/                                    Subagent definitions (5 agents)
+bin/causal-debugger                        Plugin shim (auto-on-PATH inside Claude Code) that dispatches into the venv
 src/causal_debugger/                       Importable package backing the scripts
   schemas/                                 JSON schemas for artifacts
   spec/                                    Spec validation

@@ -1,6 +1,6 @@
 [project]
 name = "causal-debugger"
-version = "0.1.0"
+version = "0.2.0"
 description = "Causal Decision Debugger: Claude Code Skill + Python toolkit for decision-grade causal inference."
 readme = "README.md"
 requires-python = ">=3.11"

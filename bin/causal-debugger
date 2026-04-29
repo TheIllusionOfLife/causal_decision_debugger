@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Plugin shim for the ``causal-debugger`` CLI.
+
+Claude Code adds the plugin's ``bin/`` directory to the Bash tool's ``PATH``
+while the plugin is enabled, so this file is what resolves when an agent (or
+the user) types ``causal-debugger ...`` inside a session. It dispatches into
+``${CLAUDE_PLUGIN_DATA}/venv/bin/causal-debugger`` (created by ``bootstrap.py``)
+or, if that doesn't exist yet, prints an instruction to run bootstrap.
+
+Stdlib only by design: this script must be importable / runnable before the
+plugin's venv exists, so it cannot depend on installed packages.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+_SCRIPTS_DIR = _HERE.parent / "skills" / "diagnose" / "scripts"
+_BOOTSTRAP_PATH = _SCRIPTS_DIR / "bootstrap.py"
+
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from _install_paths import resolve_data_dir
+
+
+def _venv_cli(data_dir: Path) -> Path:
+    if sys.platform == "win32":
+        return data_dir / "venv" / "Scripts" / "causal-debugger.exe"
+    return data_dir / "venv" / "bin" / "causal-debugger"
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    cli = _venv_cli(resolve_data_dir())
+    if cli.exists():
+        return subprocess.call([str(cli), *args])
+    print(
+        f"causal-debugger is not installed yet.\n"
+        f"Run: {sys.executable} {_BOOTSTRAP_PATH}\n"
+        f"(this creates a venv at the plugin data dir and installs the bundled wheel)",
+        file=sys.stderr,
+    )
+    return 127
+
+
+if __name__ == "__main__":
+    sys.exit(main())

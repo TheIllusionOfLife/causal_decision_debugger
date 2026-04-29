@@ -1,5 +1,7 @@
 # Causal Decision Debugger — Build Specification
 
+> **Historical document.** This spec describes the original pre-plugin design. The shipped layout differs: skill assets live at `skills/causal-decision-debugger/` (not `.claude/skills/...`), agents at `agents/` (not `.claude/agents/...`), and there is a packaged `causal-debugger` CLI plus a bundled wheel under `skills/causal-decision-debugger/vendor/`. For the current structure and entry points, see `README.md` and `CLAUDE.md` — those are authoritative; this spec captures the rationale and method coverage but not the final paths.
+
 ## 0. Purpose of This Document
 
 This document is a build-ready specification for an AI coding agent. It describes the product concept, architecture, Claude Code Skill integration, future standalone CLI, agent workflow, artifacts, data safety model, method-selection logic, and implementation roadmap for a causal inference assistant aimed at engineers, data scientists, product managers, and business teams.
