@@ -1,1 +1,2 @@
 *.whl binary
+bin/causal-debugger text eol=lf

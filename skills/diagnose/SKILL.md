@@ -15,12 +15,12 @@ Help users move from correlation-based claims to careful causal claims with expl
 The skill ships a bundled Python wheel. Before running any deterministic script, ask the user for permission to bootstrap, then execute:
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/causal-decision-debugger/scripts/bootstrap.py
+python ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/bootstrap.py
 ```
 
-Bootstrap is idempotent (skips if already installed) and stdlib-only. It tries `uv tool install`, then `pipx`, then `pip --user`. **Network access is required on the first run** to resolve heavy transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `dowhy`, `econml`) from PyPI; the bundled wheel only contains `causal_debugger` itself.
+Bootstrap is idempotent (skips if the bundled wheel's metadata fingerprint already matches the installed venv) and stdlib-only. It creates an isolated virtualenv at `${CLAUDE_PLUGIN_DATA}/venv/` and `pip install`s the bundled wheel into it. **Network access is required on the first run** to resolve heavy transitive dependencies (`pandas`, `scipy`, `scikit-learn`, `dowhy`, `econml`) from PyPI; the bundled wheel only contains `causal_debugger` itself. The first install downloads ~500 MB and takes 5-30 minutes; subsequent runs are instant.
 
-After success, the `causal-debugger` CLI is on the user's `$PATH`.
+After success, the `causal-debugger` CLI is auto-on-PATH inside Claude Code via the plugin's `bin/` directory. Outside Claude Code, the portable invocation is `${CLAUDE_PLUGIN_ROOT}/bin/causal-debugger` (the bin shim resolves the venv path automatically, including when `CLAUDE_PLUGIN_DATA` is unset). You can also invoke the venv binary directly at `${CLAUDE_PLUGIN_DATA}/venv/bin/causal-debugger`; when `CLAUDE_PLUGIN_DATA` is unset, the bootstrap fallback is `~/.claude/plugins/data/causal-decision-debugger/venv/bin/causal-debugger`.
 
 ## Required workflow
 

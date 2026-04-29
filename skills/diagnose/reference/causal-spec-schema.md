@@ -9,7 +9,7 @@ causal-debugger validate-spec path/to/causal_spec.yaml
 If the CLI is not yet on `$PATH`, run the bootstrap first:
 
 ```bash
-python ${CLAUDE_PLUGIN_ROOT}/skills/causal-decision-debugger/scripts/bootstrap.py
+python ${CLAUDE_PLUGIN_ROOT}/skills/diagnose/scripts/bootstrap.py
 ```
 
 ## Required top-level keys

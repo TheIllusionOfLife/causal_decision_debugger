@@ -36,16 +36,25 @@ After modifying `src/causal_debugger/`, rebuild the bundled wheel and refresh it
 
 ```bash
 uv build
-cp dist/causal_debugger-*.whl skills/causal-decision-debugger/vendor/
-# regenerate sha256 + metadata_sha256 in skills/causal-decision-debugger/vendor/manifest.json
+cp dist/causal_debugger-*.whl skills/diagnose/vendor/
+# regenerate sha256 + metadata_sha256 in skills/diagnose/vendor/manifest.json
 ```
+
+### Develop the plugin in-tree
+
+Two ways to load the plugin during development:
+
+- **Symlinks** (already wired up): `.claude/skills/diagnose -> ../../skills/diagnose` and `.claude/agents -> ../agents`. Both gitignored. Claude Code finds the plugin assets when launched from the repo root.
+- **`--plugin-dir` flag**: `claude --plugin-dir .` from the repo root. Doesn't require symlinks.
+
+After editing `SKILL.md`, an agent file, or `.claude-plugin/plugin.json`, run `/reload-plugins` inside Claude Code to pick up changes without restarting.
 
 ## Architecture
 
 The repo is a **Claude Code plugin** that bundles **two surfaces over the same core**:
 
-1. **Plugin assets at the repo root**: `.claude-plugin/{plugin,marketplace}.json`, `skills/causal-decision-debugger/` (SKILL.md + reference + bootstrap), `agents/` (`data-scout`, `sql-safety-reviewer`, `causal-methodologist`, `assumption-ledger-agent`, `report-writer`). The Skill is the user-facing workflow; Claude reads SKILL.md and dispatches to subagents and the `causal-debugger` CLI. Local symlinks under `.claude/skills/` and `.claude/agents/` (gitignored) point at the top-level dirs so Claude Code finds them when working in this repo.
-2. **`causal_debugger` Python package** at `src/causal_debugger/` containing the deterministic logic, exposed as the `causal-debugger` console script (entry point in `cli.py`). The skill's `scripts/bootstrap.py` installs the bundled wheel from `skills/causal-decision-debugger/vendor/` on first use.
+1. **Plugin assets at the repo root**: `.claude-plugin/{plugin,marketplace}.json`, `skills/diagnose/` (SKILL.md + reference + templates + scripts/bootstrap.py + scripts/_install_paths.py + vendor/wheel), `agents/` (`data-scout`, `sql-safety-reviewer`, `causal-methodologist`, `assumption-ledger-agent`, `report-writer`), and `bin/causal-debugger` (a stdlib-only Python shim that Claude Code auto-PATHs while the plugin is enabled — it dispatches into the venv). The Skill is the user-facing workflow; Claude reads SKILL.md and dispatches to subagents and the `causal-debugger` CLI. Local symlinks under `.claude/skills/diagnose` and `.claude/agents` (gitignored) point at the top-level dirs so Claude Code finds them when working in this repo.
+2. **`causal_debugger` Python package** at `src/causal_debugger/` containing the deterministic logic, exposed as the `causal-debugger` console script (entry point in `cli.py`). The skill's `scripts/bootstrap.py` installs the bundled wheel into a per-plugin venv at `${CLAUDE_PLUGIN_DATA}/venv/` (the persistent data dir documented in the Claude Code plugins reference) so heavy transitive deps (`pandas`, `scipy`, `dowhy`, `econml`) live in the venv and survive plugin updates without polluting the user's Python. `bin/causal-debugger` is a thin shim that resolves the data dir via the shared `_install_paths` helper and `subprocess.call`s into `${CLAUDE_PLUGIN_DATA}/venv/bin/causal-debugger`. If the venv is missing, the shim prints a "run bootstrap" message instead of silently dispatching to a different CLI on PATH.
 
 ### Pipeline shape (src/causal_debugger/pipeline.py)
 
@@ -66,7 +75,7 @@ Every artifact has a JSON schema under `src/causal_debugger/schemas/` (force-inc
 - `causal_spec.schema.json`, `assumption_ledger.schema.json` — inputs.
 - `estimate_result.schema.json`, `refutation_result.schema.json`, `identifiability_failure.schema.json` — outputs from estimators / refutation / the not-identifiable branch.
 
-`tests/contracts/test_schemas.py` and `test_templates.py` enforce that artifacts and the YAML/JSON templates under `skills/causal-decision-debugger/templates/` validate. **When you add an estimator or refutation check, return a payload that matches the corresponding schema and add a contract test.**
+`tests/contracts/test_schemas.py` and `test_templates.py` enforce that artifacts and the YAML/JSON templates under `skills/diagnose/templates/` validate. **When you add an estimator or refutation check, return a payload that matches the corresponding schema and add a contract test.**
 
 JSON dumps in the pipeline use `allow_nan=False` deliberately so estimator NaN/Inf leaks fail loudly instead of producing invalid JSON.
 

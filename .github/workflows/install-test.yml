@@ -24,7 +24,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Python 3.11
-        # v6 ships with Node.js 24; v5 emits a deprecation warning for Node.js 20.
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -33,6 +32,31 @@ jobs:
         uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: "3.11"
+
+      - name: Set up Node.js (for claude plugin validate)
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate plugin manifest + frontmatter
+        # Catches plugin.json schema errors, malformed SKILL.md / agent
+        # frontmatter, and bad hooks/hooks.json before they hit users.
+        run: claude plugin validate .
+
+      - name: Stale-reference grep guard
+        # The skill folder rename (old name -> skills/diagnose/) and the
+        # slash-command suffix change must not leave any dangling references
+        # in user-facing files. The pattern is split across two strings so
+        # this workflow's grep step doesn't match itself.
+        run: |
+          PATTERN="skills/causal-decision""-debugger|:causal-decision""-debugger"
+          if rg -n -e "$PATTERN" -- README.md CLAUDE.md skills/ agents/; then
+            echo "::error::stale references to the old skill folder name detected"
+            exit 1
+          fi
 
       - name: Build wheel
         run: uv build --wheel --out-dir dist
@@ -44,8 +68,8 @@ jobs:
           from pathlib import Path
 
           built = next(Path("dist").glob("causal_debugger-*.whl"))
-          vendored = Path("skills/causal-decision-debugger/vendor") / built.name
-          manifest_path = Path("skills/causal-decision-debugger/vendor/manifest.json")
+          vendored = Path("skills/diagnose/vendor") / built.name
+          manifest_path = Path("skills/diagnose/vendor/manifest.json")
           if not vendored.exists():
               sys.exit(f"missing vendored wheel: {vendored}")
           if not manifest_path.exists():
@@ -60,8 +84,35 @@ jobs:
                   norm = "\n".join(line.rstrip() for line in raw.splitlines()).strip() + "\n"
                   return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
+          def payload_hash(wheel: Path) -> str:
+              # Deterministic hash of the package payload to catch code-only or
+              # console-script changes that leave METADATA byte-identical.
+              # Includes causal_debugger/* (source) and entry_points.txt (console
+              # script bindings). Excludes RECORD/WHEEL because they can shift
+              # with hatchling timestamps.
+              with zipfile.ZipFile(wheel) as zf:
+                  names = sorted(
+                      n for n in zf.namelist()
+                      if (n.startswith("causal_debugger/") and not n.endswith("/"))
+                      or n.endswith(".dist-info/entry_points.txt")
+                  )
+                  h = hashlib.sha256()
+                  for n in names:
+                      # Strip the version-bearing dist-info prefix so a no-op
+                      # version bump doesn't trip the cross-rebuild equivalence
+                      # check; keep the basename to detect entry_points.txt
+                      # additions/removals.
+                      logical = n.split(".dist-info/")[-1] if ".dist-info/" in n else n
+                      h.update(logical.encode("utf-8"))
+                      h.update(b"\0")
+                      h.update(zf.read(n))
+                      h.update(b"\0")
+                  return h.hexdigest()
+
           built_meta = metadata_hash(built)
           vendor_meta = metadata_hash(vendored)
+          built_payload = payload_hash(built)
+          vendor_payload = payload_hash(vendored)
           built_sha = hashlib.sha256(built.read_bytes()).hexdigest()
           vendor_sha = hashlib.sha256(vendored.read_bytes()).hexdigest()
 
@@ -72,24 +123,35 @@ jobs:
               errors.append("vendored wheel METADATA differs from manifest")
           if manifest.get("sha256") != vendor_sha:
               errors.append("vendored wheel sha256 differs from manifest")
+          if manifest.get("payload_sha256") != vendor_payload:
+              errors.append(
+                  f"payload_sha256 mismatch (vendor):\n  manifest: {manifest.get('payload_sha256')}\n  vendor:   {vendor_payload}"
+              )
+          if vendor_payload != built_payload:
+              errors.append(
+                  f"vendored wheel payload differs from fresh build:\n  vendor: {vendor_payload}\n  build:  {built_payload}"
+              )
           # built_sha may legitimately differ from vendor_sha if hatchling timestamps shift,
-          # so we only require METADATA equivalence and consistency between manifest and vendor.
+          # so we require METADATA + payload equivalence rather than full-wheel sha equality.
           if errors:
               print("\n".join(errors), file=sys.stderr)
               print("\nSrc changed without re-bundling: rebuild and update manifest.json.", file=sys.stderr)
               print(f"  fresh build sha:  {built_sha}", file=sys.stderr)
               print(f"  vendored sha:     {vendor_sha}", file=sys.stderr)
               sys.exit(1)
-          print("manifest matches vendor wheel; METADATA matches fresh build.")
+          print("manifest matches vendor wheel; METADATA + payload match fresh build.")
           PY
 
       - name: Stage plugin into a clean directory
         # Mirror examples/ exactly because the example causal_spec.yaml hardcodes
         # `local_path: examples/onboarding_retention/data/observational.parquet`.
+        # ``bin/`` must be staged so the bin/causal-debugger shim is on PATH after
+        # the bootstrap step finishes.
         run: |
           mkdir -p "${RUNNER_TEMP}/plugin-test/examples"
-          cp -r skills agents .claude-plugin "${RUNNER_TEMP}/plugin-test/"
+          cp -r skills agents bin .claude-plugin "${RUNNER_TEMP}/plugin-test/"
           cp -r examples/onboarding_retention "${RUNNER_TEMP}/plugin-test/examples/"
+          chmod +x "${RUNNER_TEMP}/plugin-test/bin/causal-debugger"
 
       - name: Confirm clean env (no causal_debugger preinstalled)
         run: |
@@ -101,36 +163,52 @@ jobs:
               print('clean env confirmed')
           "
 
-      - name: Run bootstrap
-        run: python "${RUNNER_TEMP}/plugin-test/skills/causal-decision-debugger/scripts/bootstrap.py"
+      - name: Run bootstrap (installs into isolated venv under CLAUDE_PLUGIN_DATA)
+        env:
+          # ${CLAUDE_PLUGIN_DATA} is set by Claude Code at runtime to a per-plugin
+          # persistent data dir; in CI we set it manually to a tmpdir so the
+          # bootstrap installs into the same path the bin/causal-debugger shim
+          # will resolve.
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
+        run: python "${RUNNER_TEMP}/plugin-test/skills/diagnose/scripts/bootstrap.py"
 
-      - name: Ensure causal-debugger is on PATH
+      - name: Confirm bin/ shim is executable and venv binary exists
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-            echo "$HOME/Library/Python/3.11/bin" >> "$GITHUB_PATH"
-          else
-            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          fi
+          test -x "${RUNNER_TEMP}/plugin-test/bin/causal-debugger"
+          test -x "${CLAUDE_PLUGIN_DATA}/venv/bin/causal-debugger"
+          test -f "${CLAUDE_PLUGIN_DATA}/install_manifest.json"
 
-      - name: causal-debugger --version
+      - name: Add bin/ shim to PATH
+        run: echo "${RUNNER_TEMP}/plugin-test/bin" >> "$GITHUB_PATH"
+
+      - name: causal-debugger --version (via bin/ shim)
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
         run: causal-debugger --version
 
       - name: causal-debugger doctor
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
         run: causal-debugger doctor
 
       - name: Generate example data
         # The example parquet is gitignored, so regenerate. generate_synthetic.py
-        # imports causal_debugger which only lives in the uv-tool isolated venv,
-        # so invoke it with that venv's python (reported by `causal-debugger doctor`).
+        # imports causal_debugger which only lives in the plugin venv, so invoke
+        # it with that venv's python (reported by `causal-debugger doctor`).
         working-directory: ${{ runner.temp }}/plugin-test
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
         run: |
-          TOOL_PY=$(causal-debugger doctor | python -c "import json,sys; print(json.load(sys.stdin)['python_executable'])")
-          echo "tool python: $TOOL_PY"
-          "$TOOL_PY" examples/onboarding_retention/generate_synthetic.py
+          VENV_PY=$(causal-debugger doctor | python -c "import json,sys; print(json.load(sys.stdin)['python_executable'])")
+          echo "venv python: $VENV_PY"
+          "$VENV_PY" examples/onboarding_retention/generate_synthetic.py
 
       - name: Run pipeline end-to-end
         working-directory: ${{ runner.temp }}/plugin-test
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
         run: causal-debugger pipeline examples/onboarding_retention
 
       - name: Confirm report artifacts
@@ -139,3 +217,10 @@ jobs:
           test -f examples/onboarding_retention/report.md
           test -f examples/onboarding_retention/method_plan.json
           grep -q "Effect estimate\|Estimate\|ATE" examples/onboarding_retention/report.md
+
+      - name: Confirm bootstrap is idempotent on second run
+        env:
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/plugin-data
+        run: |
+          python "${RUNNER_TEMP}/plugin-test/skills/diagnose/scripts/bootstrap.py" 2>&1 | tee /tmp/bootstrap2.log
+          grep -q "already installed" /tmp/bootstrap2.log
