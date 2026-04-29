@@ -1,0 +1,17 @@
+{
+  "name": "causal-decision-debugger",
+  "version": "0.1.0",
+  "description": "Translate business questions into causal specs, audit data, pick a causal inference method, run estimation + refutation, and produce a decision-grade report. \"Not identifiable\" is a first-class outcome.",
+  "author": {
+    "name": "Causal Decision Debugger Contributors"
+  },
+  "homepage": "https://github.com/TheIllusionOfLife/causal_decision_debugger",
+  "repository": "https://github.com/TheIllusionOfLife/causal_decision_debugger",
+  "license": "Apache-2.0",
+  "keywords": [
+    "causal-inference",
+    "ab-testing",
+    "experimentation",
+    "analytics"
+  ]
+}

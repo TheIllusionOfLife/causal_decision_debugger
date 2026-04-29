@@ -1,0 +1,141 @@
+name: install-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-test:
+    name: bootstrap + pipeline (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        # v6 ships with Node.js 24; v5 emits a deprecation warning for Node.js 20.
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv (for build + tool install)
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+
+      - name: Verify vendor manifest matches freshly built wheel
+        run: |
+          python <<'PY'
+          import hashlib, json, sys, zipfile
+          from pathlib import Path
+
+          built = next(Path("dist").glob("causal_debugger-*.whl"))
+          vendored = Path("skills/causal-decision-debugger/vendor") / built.name
+          manifest_path = Path("skills/causal-decision-debugger/vendor/manifest.json")
+          if not vendored.exists():
+              sys.exit(f"missing vendored wheel: {vendored}")
+          if not manifest_path.exists():
+              sys.exit(f"missing manifest: {manifest_path}")
+
+          manifest = json.loads(manifest_path.read_text())
+
+          def metadata_hash(wheel: Path) -> str:
+              with zipfile.ZipFile(wheel) as zf:
+                  meta = next(n for n in zf.namelist() if n.endswith(".dist-info/METADATA"))
+                  raw = zf.read(meta).decode("utf-8")
+                  norm = "\n".join(line.rstrip() for line in raw.splitlines()).strip() + "\n"
+                  return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+          built_meta = metadata_hash(built)
+          vendor_meta = metadata_hash(vendored)
+          built_sha = hashlib.sha256(built.read_bytes()).hexdigest()
+          vendor_sha = hashlib.sha256(vendored.read_bytes()).hexdigest()
+
+          errors = []
+          if manifest.get("metadata_sha256") != built_meta:
+              errors.append(f"metadata_sha256 mismatch:\n  manifest:    {manifest.get('metadata_sha256')}\n  fresh build: {built_meta}")
+          if manifest.get("metadata_sha256") != vendor_meta:
+              errors.append("vendored wheel METADATA differs from manifest")
+          if manifest.get("sha256") != vendor_sha:
+              errors.append("vendored wheel sha256 differs from manifest")
+          # built_sha may legitimately differ from vendor_sha if hatchling timestamps shift,
+          # so we only require METADATA equivalence and consistency between manifest and vendor.
+          if errors:
+              print("\n".join(errors), file=sys.stderr)
+              print("\nSrc changed without re-bundling: rebuild and update manifest.json.", file=sys.stderr)
+              print(f"  fresh build sha:  {built_sha}", file=sys.stderr)
+              print(f"  vendored sha:     {vendor_sha}", file=sys.stderr)
+              sys.exit(1)
+          print("manifest matches vendor wheel; METADATA matches fresh build.")
+          PY
+
+      - name: Stage plugin into a clean directory
+        # Mirror examples/ exactly because the example causal_spec.yaml hardcodes
+        # `local_path: examples/onboarding_retention/data/observational.parquet`.
+        run: |
+          mkdir -p "${RUNNER_TEMP}/plugin-test/examples"
+          cp -r skills agents .claude-plugin "${RUNNER_TEMP}/plugin-test/"
+          cp -r examples/onboarding_retention "${RUNNER_TEMP}/plugin-test/examples/"
+
+      - name: Confirm clean env (no causal_debugger preinstalled)
+        run: |
+          python -c "
+          try:
+              import causal_debugger
+              raise SystemExit(f'unexpected: causal_debugger already present at {causal_debugger.__file__}')
+          except ImportError:
+              print('clean env confirmed')
+          "
+
+      - name: Run bootstrap
+        run: python "${RUNNER_TEMP}/plugin-test/skills/causal-decision-debugger/scripts/bootstrap.py"
+
+      - name: Ensure causal-debugger is on PATH
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+            echo "$HOME/Library/Python/3.11/bin" >> "$GITHUB_PATH"
+          else
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: causal-debugger --version
+        run: causal-debugger --version
+
+      - name: causal-debugger doctor
+        run: causal-debugger doctor
+
+      - name: Generate example data
+        # The example parquet is gitignored, so regenerate. generate_synthetic.py
+        # imports causal_debugger which only lives in the uv-tool isolated venv,
+        # so invoke it with that venv's python (reported by `causal-debugger doctor`).
+        working-directory: ${{ runner.temp }}/plugin-test
+        run: |
+          TOOL_PY=$(causal-debugger doctor | python -c "import json,sys; print(json.load(sys.stdin)['python_executable'])")
+          echo "tool python: $TOOL_PY"
+          "$TOOL_PY" examples/onboarding_retention/generate_synthetic.py
+
+      - name: Run pipeline end-to-end
+        working-directory: ${{ runner.temp }}/plugin-test
+        run: causal-debugger pipeline examples/onboarding_retention
+
+      - name: Confirm report artifacts
+        working-directory: ${{ runner.temp }}/plugin-test
+        run: |
+          test -f examples/onboarding_retention/report.md
+          test -f examples/onboarding_retention/method_plan.json
+          grep -q "Effect estimate\|Estimate\|ATE" examples/onboarding_retention/report.md

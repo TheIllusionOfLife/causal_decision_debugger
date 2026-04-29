@@ -1,15 +1,15 @@
 # Causal Spec Schema
 
-The canonical structure of `causal_spec.yaml` is defined by `src/causal_debugger/schemas/causal_spec.schema.json`. Validate any spec via:
+The canonical structure of `causal_spec.yaml` is defined by the `causal_spec` JSON schema bundled inside the `causal_debugger` Python package. Validate any spec via the bundled CLI:
 
 ```bash
-uv run python -m causal_debugger.spec.validate path/to/causal_spec.yaml
+causal-debugger validate-spec path/to/causal_spec.yaml
 ```
 
-Or the script shim:
+If the CLI is not yet on `$PATH`, run the bootstrap first:
 
 ```bash
-uv run python .claude/skills/causal-decision-debugger/scripts/validate_causal_spec.py path/to/causal_spec.yaml
+python ${CLAUDE_PLUGIN_ROOT}/skills/causal-decision-debugger/scripts/bootstrap.py
 ```
 
 ## Required top-level keys
@@ -24,7 +24,7 @@ uv run python .claude/skills/causal-decision-debugger/scripts/validate_causal_sp
 
 ## Cross-field rule (validator)
 
-The `validate_causal_spec.py` script also enforces:
+`causal-debugger validate-spec` also enforces:
 
 - No variable appears in both `pre_treatment_covariates` and `forbidden_post_treatment_variables`.
 - Every `assumptions[*].status` is in the allowed enum.

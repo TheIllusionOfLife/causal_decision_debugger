@@ -55,3 +55,8 @@ examples/**/*.parquet
 tests/scenarios/_data/
 
 # uv keeps lockfile committed; only ignore the venv it manages
+
+# Dev-only symlinks: real plugin assets live at top-level skills/ and agents/.
+# These symlinks let Claude Code pick them up when working in this repo.
+.claude/skills
+.claude/agents

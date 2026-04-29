@@ -14,7 +14,7 @@ Classify assumptions as:
 - violated
 - unknown
 
-Track evidence and risk. Output YAML must validate against `src/causal_debugger/schemas/assumption_ledger.schema.json`:
+Track evidence and risk. Output YAML is validated against the bundled `assumption_ledger` schema (enforced when you run `causal-debugger pipeline`; `causal-debugger validate-spec` only validates `causal_spec.yaml`):
 
 ```yaml
 assumptions:

@@ -1,0 +1,13 @@
+{
+  "name": "causal-decision-debugger-marketplace",
+  "owner": {
+    "name": "TheIllusionOfLife"
+  },
+  "plugins": [
+    {
+      "name": "causal-decision-debugger",
+      "source": ".",
+      "description": "Causal Decision Debugger: skill + agents + bundled Python toolkit for decision-grade causal inference."
+    }
+  ]
+}

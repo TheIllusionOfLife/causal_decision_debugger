@@ -18,8 +18,9 @@ uv run ruff format .                         # formatter (double quotes, line-le
 Run the end-to-end pipeline against the bundled example:
 
 ```bash
-uv run python .claude/skills/causal-decision-debugger/scripts/run_pipeline.py examples/onboarding_retention
-# or equivalently
+# After bootstrap (or `uv sync --extra dev` for in-tree dev):
+causal-debugger pipeline examples/onboarding_retention
+# Equivalently, from a uv-synced checkout:
 uv run python -m causal_debugger.pipeline examples/onboarding_retention
 ```
 
@@ -31,18 +32,26 @@ The example's `data/` is gitignored. Regenerate it before running the pipeline i
 uv run python examples/onboarding_retention/generate_synthetic.py
 ```
 
+After modifying `src/causal_debugger/`, rebuild the bundled wheel and refresh its manifest so the install-test CI does not fail:
+
+```bash
+uv build
+cp dist/causal_debugger-*.whl skills/causal-decision-debugger/vendor/
+# regenerate sha256 + metadata_sha256 in skills/causal-decision-debugger/vendor/manifest.json
+```
+
 ## Architecture
 
-The repo ships **two surfaces over the same core**:
+The repo is a **Claude Code plugin** that bundles **two surfaces over the same core**:
 
-1. **Claude Code Skill** at `.claude/skills/causal-decision-debugger/` (SKILL.md + reference docs + templates + script shims) and subagents under `.claude/agents/` (`data-scout`, `sql-safety-reviewer`, `causal-methodologist`, `assumption-ledger-agent`, `report-writer`). The Skill is the user-facing workflow; Claude reads SKILL.md and dispatches to subagents and scripts.
-2. **`causal_debugger` Python package** at `src/causal_debugger/` containing the deterministic logic. The Skill's `scripts/*.py` are thin shims; prefer running the package via `uv run python -m causal_debugger.<module>` so CWD doesn't matter.
+1. **Plugin assets at the repo root**: `.claude-plugin/{plugin,marketplace}.json`, `skills/causal-decision-debugger/` (SKILL.md + reference + bootstrap), `agents/` (`data-scout`, `sql-safety-reviewer`, `causal-methodologist`, `assumption-ledger-agent`, `report-writer`). The Skill is the user-facing workflow; Claude reads SKILL.md and dispatches to subagents and the `causal-debugger` CLI. Local symlinks under `.claude/skills/` and `.claude/agents/` (gitignored) point at the top-level dirs so Claude Code finds them when working in this repo.
+2. **`causal_debugger` Python package** at `src/causal_debugger/` containing the deterministic logic, exposed as the `causal-debugger` console script (entry point in `cli.py`). The skill's `scripts/bootstrap.py` installs the bundled wheel from `skills/causal-decision-debugger/vendor/` on first use.
 
 ### Pipeline shape (src/causal_debugger/pipeline.py)
 
 `run(analysis_dir)` is the orchestrator. The flow is **validate → audit → route → estimate → refute → render**:
 
-1. Loads + validates `causal_spec.yaml` against `schemas/causal_spec.schema.json` (`spec/validate.py`).
+1. Loads + validates `causal_spec.yaml` against the bundled `causal_spec` schema (`spec/validate.py`).
 2. Reads the data table from `spec.data.local_path` (`data/io.py`).
 3. Audits: `data/profile.py` (always), `data/timestamps.py` (only when treatment_time + outcome_window columns exist), `data/balance.py` (SMD; only when treatment + covariates are present).
 4. Routes to a method via `methods/router.py` based on a `RouterContext` derived from the spec (`context_from_spec`). The router can return `identifiability_status: "not_identifiable"`, in which case the pipeline writes `identifiability_failure.json` and a report explaining why, then exits without estimating. **This is a valid outcome and must be preserved.**
@@ -52,12 +61,12 @@ The repo ships **two surfaces over the same core**:
 
 ### Contract artifacts
 
-Every artifact has a JSON schema under `src/causal_debugger/schemas/`:
+Every artifact has a JSON schema under `src/causal_debugger/schemas/` (force-included into the wheel via `pyproject.toml`):
 
 - `causal_spec.schema.json`, `assumption_ledger.schema.json` — inputs.
 - `estimate_result.schema.json`, `refutation_result.schema.json`, `identifiability_failure.schema.json` — outputs from estimators / refutation / the not-identifiable branch.
 
-`tests/contracts/test_schemas.py` and `test_templates.py` enforce that artifacts and the YAML/JSON templates under `.claude/skills/causal-decision-debugger/templates/` validate. **When you add an estimator or refutation check, return a payload that matches the corresponding schema and add a contract test.**
+`tests/contracts/test_schemas.py` and `test_templates.py` enforce that artifacts and the YAML/JSON templates under `skills/causal-decision-debugger/templates/` validate. **When you add an estimator or refutation check, return a payload that matches the corresponding schema and add a contract test.**
 
 JSON dumps in the pipeline use `allow_nan=False` deliberately so estimator NaN/Inf leaks fail loudly instead of producing invalid JSON.
 
