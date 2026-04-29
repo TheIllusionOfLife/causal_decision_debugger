@@ -2,8 +2,8 @@
   "entry_points": [
     "causal-debugger"
   ],
-  "metadata_sha256": "958ed27512aba3db6192ea8d64a98456e5bd6fe5f02998d2f2c40cea0a0ea5de",
-  "sha256": "9a657b14d435e108bb8118a86389ca5eb356585c9ae8ff66be08ebecbb776ef8",
+  "metadata_sha256": "20b8e49e219b109e54ae8bc67273d7e7ddad91b9dad889fd61fd51fd31a90ece",
+  "sha256": "6ce43070b360c4431534472bce027b227b1120379395c0d8b32609ce6791b03e",
   "version": "0.1.0",
   "wheel": "causal_debugger-0.1.0-py3-none-any.whl"
 }

@@ -72,30 +72,38 @@ def _verify_manifest(manifest: dict, wheel: Path) -> int | None:
     return None
 
 
-def _existing_install() -> tuple[str | None, str | None]:
-    """Return (cli_path, version) if causal-debugger is callable AND healthy.
+def _existing_install() -> tuple[str | None, str | None, str | None]:
+    """Return (cli_path, version, metadata_sha256) for a healthy install.
 
     Health is decided by ``causal-debugger doctor``: if the schemas can't be
     loaded (a corrupted install), doctor exits non-zero and we treat the
     install as broken so the bootstrap re-installs instead of accepting it.
+    The returned ``metadata_sha256`` lets the caller distinguish "same
+    version, same source" from "same version, rebuilt source" — the version
+    string alone can't.
     """
     cli = shutil.which("causal-debugger")
     if cli is None:
-        return None, None
+        return None, None, None
     try:
         out = subprocess.run(
             [cli, "doctor"], capture_output=True, text=True, timeout=15, check=False
         )
     except (OSError, subprocess.TimeoutExpired):
-        return cli, None
+        return cli, None, None
     if out.returncode != 0:
-        return cli, None
+        return cli, None, None
     try:
         info = json.loads(out.stdout)
     except json.JSONDecodeError:
-        return cli, None
+        return cli, None, None
     version = info.get("package_version")
-    return cli, version if isinstance(version, str) else None
+    metadata_sha = info.get("metadata_sha256")
+    return (
+        cli,
+        version if isinstance(version, str) else None,
+        metadata_sha if isinstance(metadata_sha, str) else None,
+    )
 
 
 def _try_install(cmd: list[str]) -> tuple[bool, str]:
@@ -149,7 +157,7 @@ def _post_install_check(expected_version: str) -> int:
             f'  export PATH="{bin_dir}:$PATH"\n'
             "Then re-run this bootstrap."
         )
-    cli, version = _existing_install()
+    cli, version, _ = _existing_install()
     if version is None:
         return _die(
             f"installed at {cli} but `causal-debugger doctor` failed.\n"
@@ -171,18 +179,38 @@ def main() -> int:
     if err is not None:
         return err
 
+    # Catch the full set of "manifest is unusable" failure modes (missing,
+    # malformed JSON, missing required keys, wrong type) so the user gets a
+    # readable bootstrap error and not a Python traceback.
     try:
         manifest = _read_manifest()
         wheel = _wheel_path(manifest)
+        required_keys = ("wheel", "sha256", "metadata_sha256", "version")
+        missing = [k for k in required_keys if k not in manifest]
+        if missing:
+            raise KeyError(f"manifest is missing required keys: {missing}")
     except FileNotFoundError as exc:
         return _die(str(exc))
+    except json.JSONDecodeError as exc:
+        return _die(f"manifest.json is not valid JSON: {exc}")
+    except (KeyError, TypeError, ValueError) as exc:
+        return _die(f"manifest.json is malformed: {exc!r}")
 
     err = _verify_manifest(manifest, wheel)
     if err is not None:
         return err
 
-    cli, version = _existing_install()
-    if cli is not None and version == manifest["version"]:
+    cli, version, metadata_sha = _existing_install()
+    # Compare the metadata fingerprint as well as the version: a same-version
+    # rebuild (source changed without bumping ``project.version``) leaves the
+    # version string equal but the METADATA hash different, and we want to
+    # reinstall in that case. ``metadata_sha`` is None on older installs that
+    # don't expose the field — treat that as "needs reinstall" too.
+    if (
+        cli is not None
+        and version == manifest["version"]
+        and metadata_sha == manifest["metadata_sha256"]
+    ):
         print(f"READY: causal-debugger {version} already installed at {cli}")
         return 0
 

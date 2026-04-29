@@ -58,7 +58,7 @@ When developing in this repo, the `.claude/skills/` and `.claude/agents/` symlin
 
 ## Repository layout
 
-```
+```text
 .claude-plugin/                            plugin.json + marketplace.json
 skills/causal-decision-debugger/           SKILL.md, reference docs, templates, vendored wheel, bootstrap.py
 agents/                                    Subagent definitions (5 agents)

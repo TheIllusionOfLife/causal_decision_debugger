@@ -8,6 +8,7 @@ surface and never need to remember per-module ``python -m`` paths.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import shutil
@@ -60,6 +61,26 @@ def _package_version() -> str:
         return "unknown"
 
 
+def _installed_metadata_sha256() -> str | None:
+    """SHA256 of the installed package's normalized METADATA.
+
+    Bootstrap compares this against the bundled ``manifest.json`` so it can
+    tell "same version, different source" apart from "same version, same
+    source" — which the version string alone can't do when a wheel is
+    rebuilt without bumping ``project.version``. Normalization (strip
+    trailing whitespace per line, canonical trailing newline) matches the
+    install-test workflow's hashing so both sides agree.
+    """
+    try:
+        text = importlib.metadata.distribution("causal-debugger").read_text("METADATA")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+    if text is None:
+        return None
+    norm = "\n".join(line.rstrip() for line in text.splitlines()).strip() + "\n"
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+
 def _doctor(_: list[str]) -> int:
     cli_path = shutil.which("causal-debugger") or "<not on PATH>"
     info: dict[str, Any] = {
@@ -72,6 +93,7 @@ def _doctor(_: list[str]) -> int:
         # location: ``~/.local`` on Linux, ``~/Library/Python/X.Y`` on stock
         # macOS Python. The hand-rolled ``~/.local/bin`` was wrong on macOS.
         "user_base_bin": str(Path(site.getuserbase()) / "bin"),
+        "metadata_sha256": _installed_metadata_sha256(),
     }
     try:
         from causal_debugger.schemas import load_schema
