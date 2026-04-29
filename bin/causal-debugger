@@ -36,7 +36,16 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     cli = _venv_cli(resolve_data_dir())
     if cli.exists():
-        return subprocess.call([str(cli), *args])
+        try:
+            return subprocess.call([str(cli), *args])
+        except OSError as exc:
+            print(
+                f"causal-debugger: cannot exec {cli} ({exc}).\n"
+                f"The venv binary is present but not runnable. Re-run bootstrap to repair:\n"
+                f"  {sys.executable} {_BOOTSTRAP_PATH}",
+                file=sys.stderr,
+            )
+            return 127
     print(
         f"causal-debugger is not installed yet.\n"
         f"Run: {sys.executable} {_BOOTSTRAP_PATH}\n"

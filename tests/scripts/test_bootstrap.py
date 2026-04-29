@@ -77,12 +77,17 @@ def test_venv_paths(bootstrap, tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _matching_recorded() -> dict[str, Any]:
+    return {
+        "metadata_sha256": _SAMPLE_MANIFEST["metadata_sha256"],
+        "sha256": _SAMPLE_MANIFEST["sha256"],
+        "version": "0.2.0",
+    }
+
+
 def test_is_install_current_true_when_everything_matches(bootstrap, tmp_path: Path) -> None:
     _make_fake_venv(tmp_path, with_cli=True)
-    _write_install_manifest(
-        tmp_path,
-        {"metadata_sha256": _SAMPLE_MANIFEST["metadata_sha256"], "version": "0.2.0"},
-    )
+    _write_install_manifest(tmp_path, _matching_recorded())
     assert bootstrap.is_install_current(tmp_path, _SAMPLE_MANIFEST) is True
 
 
@@ -93,7 +98,20 @@ def test_is_install_current_false_when_manifest_missing(bootstrap, tmp_path: Pat
 
 def test_is_install_current_false_when_metadata_hash_mismatch(bootstrap, tmp_path: Path) -> None:
     _make_fake_venv(tmp_path, with_cli=True)
-    _write_install_manifest(tmp_path, {"metadata_sha256": "different", "version": "0.2.0"})
+    recorded = _matching_recorded()
+    recorded["metadata_sha256"] = "different"
+    _write_install_manifest(tmp_path, recorded)
+    assert bootstrap.is_install_current(tmp_path, _SAMPLE_MANIFEST) is False
+
+
+def test_is_install_current_false_when_wheel_sha_mismatch(bootstrap, tmp_path: Path) -> None:
+    """METADATA can be byte-identical when only code changed. The recorded
+    wheel sha256 must match the manifest's sha256 too, otherwise pip will
+    short-circuit a same-version reinstall and the smoke test will loop."""
+    _make_fake_venv(tmp_path, with_cli=True)
+    recorded = _matching_recorded()
+    recorded["sha256"] = "stale-wheel-sha"
+    _write_install_manifest(tmp_path, recorded)
     assert bootstrap.is_install_current(tmp_path, _SAMPLE_MANIFEST) is False
 
 
@@ -101,10 +119,7 @@ def test_is_install_current_false_when_cli_binary_missing(bootstrap, tmp_path: P
     """Codex: validate both python AND causal-debugger — doctor catches runtime
     errors but not a missing console-script entry point."""
     _make_fake_venv(tmp_path, with_cli=False)
-    _write_install_manifest(
-        tmp_path,
-        {"metadata_sha256": _SAMPLE_MANIFEST["metadata_sha256"], "version": "0.2.0"},
-    )
+    _write_install_manifest(tmp_path, _matching_recorded())
     assert bootstrap.is_install_current(tmp_path, _SAMPLE_MANIFEST) is False
 
 
@@ -192,9 +207,10 @@ def test_main_skips_install_when_already_current(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     _make_fake_venv(data_dir, with_cli=True)
+    real = bootstrap.read_manifest()
     _write_install_manifest(
         data_dir,
-        {"metadata_sha256": bootstrap.read_manifest()["metadata_sha256"], "version": "0.2.0"},
+        {"metadata_sha256": real["metadata_sha256"], "sha256": real["sha256"], "version": "0.2.0"},
     )
 
     pip_calls: list[list[str]] = []
@@ -209,6 +225,49 @@ def test_main_skips_install_when_already_current(
 
     assert rc == 0
     assert pip_calls == [], "should not invoke pip when install is current"
+
+
+def test_main_force_rebuilds_on_stale_install(
+    bootstrap, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When install_manifest.json exists but its fingerprint is stale, the venv
+    must be wiped before reinstalling. Otherwise pip sees the same version,
+    skips the install, and the smoke test loops on metadata mismatch."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _make_fake_venv(data_dir, with_cli=True)
+    # Stale: install_manifest exists but with old fingerprints.
+    _write_install_manifest(
+        data_dir,
+        {"metadata_sha256": "stale-meta", "sha256": "stale-wheel", "version": "0.1.0"},
+    )
+
+    invocations: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        del kwargs
+        invocations.append(list(cmd))
+        if "venv" in cmd:
+            _make_fake_venv(data_dir, with_cli=True)
+        if cmd[-1] == "doctor":
+            stdout = json.dumps(
+                {
+                    "schemas_resolvable": True,
+                    "package_version": "0.2.0",
+                    "metadata_sha256": bootstrap.read_manifest()["metadata_sha256"],
+                }
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout, "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
+
+    rc = bootstrap.main(["--data-dir", str(data_dir)])
+    assert rc == 0
+    venv_create_cmds = [c for c in invocations if "venv" in c]
+    assert any("--clear" in c for c in venv_create_cmds), (
+        f"expected --clear on stale-install rebuild, got: {venv_create_cmds}"
+    )
 
 
 def test_main_force_rebuilds_on_partial_venv(

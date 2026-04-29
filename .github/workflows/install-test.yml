@@ -84,8 +84,27 @@ jobs:
                   norm = "\n".join(line.rstrip() for line in raw.splitlines()).strip() + "\n"
                   return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
+          def payload_hash(wheel: Path) -> str:
+              # Deterministic hash of the package payload (causal_debugger/*) to catch
+              # code-only changes that leave METADATA byte-identical. Excludes .dist-info
+              # because RECORD/WHEEL/timestamps can shift between rebuilds.
+              with zipfile.ZipFile(wheel) as zf:
+                  names = sorted(
+                      n for n in zf.namelist()
+                      if n.startswith("causal_debugger/") and not n.endswith("/")
+                  )
+                  h = hashlib.sha256()
+                  for n in names:
+                      h.update(n.encode("utf-8"))
+                      h.update(b"\0")
+                      h.update(zf.read(n))
+                      h.update(b"\0")
+                  return h.hexdigest()
+
           built_meta = metadata_hash(built)
           vendor_meta = metadata_hash(vendored)
+          built_payload = payload_hash(built)
+          vendor_payload = payload_hash(vendored)
           built_sha = hashlib.sha256(built.read_bytes()).hexdigest()
           vendor_sha = hashlib.sha256(vendored.read_bytes()).hexdigest()
 
@@ -96,15 +115,23 @@ jobs:
               errors.append("vendored wheel METADATA differs from manifest")
           if manifest.get("sha256") != vendor_sha:
               errors.append("vendored wheel sha256 differs from manifest")
+          if manifest.get("payload_sha256") != vendor_payload:
+              errors.append(
+                  f"payload_sha256 mismatch (vendor):\n  manifest: {manifest.get('payload_sha256')}\n  vendor:   {vendor_payload}"
+              )
+          if vendor_payload != built_payload:
+              errors.append(
+                  f"vendored wheel payload differs from fresh build:\n  vendor: {vendor_payload}\n  build:  {built_payload}"
+              )
           # built_sha may legitimately differ from vendor_sha if hatchling timestamps shift,
-          # so we only require METADATA equivalence and consistency between manifest and vendor.
+          # so we require METADATA + payload equivalence rather than full-wheel sha equality.
           if errors:
               print("\n".join(errors), file=sys.stderr)
               print("\nSrc changed without re-bundling: rebuild and update manifest.json.", file=sys.stderr)
               print(f"  fresh build sha:  {built_sha}", file=sys.stderr)
               print(f"  vendored sha:     {vendor_sha}", file=sys.stderr)
               sys.exit(1)
-          print("manifest matches vendor wheel; METADATA matches fresh build.")
+          print("manifest matches vendor wheel; METADATA + payload match fresh build.")
           PY
 
       - name: Stage plugin into a clean directory

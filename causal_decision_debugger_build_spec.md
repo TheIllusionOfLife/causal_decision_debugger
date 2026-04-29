@@ -1,6 +1,6 @@
 # Causal Decision Debugger — Build Specification
 
-> **Historical document.** This spec describes the original pre-plugin design. The shipped layout differs: skill assets live at `skills/causal-decision-debugger/` (not `.claude/skills/...`), agents at `agents/` (not `.claude/agents/...`), and there is a packaged `causal-debugger` CLI plus a bundled wheel under `skills/causal-decision-debugger/vendor/`. For the current structure and entry points, see `README.md` and `CLAUDE.md` — those are authoritative; this spec captures the rationale and method coverage but not the final paths.
+> **Historical document.** This spec describes the original pre-plugin design. The shipped layout differs: skill assets live at `skills/diagnose/` (not `.claude/skills/...`), agents at `agents/` (not `.claude/agents/...`), and there is a packaged `causal-debugger` CLI plus a bundled wheel under `skills/diagnose/vendor/`. For in-tree development, the gitignored symlinks `.claude/skills/diagnose -> ../../skills/diagnose` and `.claude/agents -> ../agents` let Claude Code load the plugin directly from the repo root (alternatively, `claude --plugin-dir .`). For the current structure and entry points, see `README.md` and `CLAUDE.md` — those are authoritative; this spec captures the rationale and method coverage but not the final paths.
 
 ## 0. Purpose of This Document
 

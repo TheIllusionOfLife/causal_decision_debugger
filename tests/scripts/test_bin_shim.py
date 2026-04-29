@@ -116,6 +116,57 @@ def test_error_message_uses_resolved_path_not_literal_env_var(
     assert str(bootstrap_abs) in err
 
 
+def test_main_handles_oserror_from_subprocess_cleanly(
+    shim, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """If the venv binary exists but cannot be executed (PermissionError, etc.),
+    the shim must print a clean repair message and exit 127, not surface a raw
+    Python traceback."""
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    fake_cli = venv_bin / "causal-debugger"
+    fake_cli.write_text("#!/bin/sh\nexit 0\n")
+    fake_cli.chmod(0o755)
+
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+
+    def boom(cmd, **kwargs):
+        del cmd, kwargs
+        raise PermissionError("not executable")
+
+    monkeypatch.setattr(shim.subprocess, "call", boom)
+
+    rc = shim.main([])
+    err = capsys.readouterr().err
+    assert rc == 127
+    assert "Traceback" not in err
+    assert "bootstrap.py" in err
+    assert str(fake_cli) in err
+
+
+def test_main_does_not_swallow_unexpected_exceptions(
+    shim, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only OSError should be caught — programming errors (KeyboardInterrupt,
+    ValueError) must still surface so they're not silently masked."""
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    fake_cli = venv_bin / "causal-debugger"
+    fake_cli.write_text("#!/bin/sh\nexit 0\n")
+    fake_cli.chmod(0o755)
+
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+
+    def boom(cmd, **kwargs):
+        del cmd, kwargs
+        raise ValueError("not an OSError")
+
+    monkeypatch.setattr(shim.subprocess, "call", boom)
+
+    with pytest.raises(ValueError, match="not an OSError"):
+        shim.main([])
+
+
 def test_shim_uses_subprocess_call_not_execv() -> None:
     """Codex: ``os.execv`` breaks stdout/stderr capture on Windows. The shim
     must use ``subprocess.call`` for cross-platform parent-process semantics."""

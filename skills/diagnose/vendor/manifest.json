@@ -3,6 +3,7 @@
     "causal-debugger"
   ],
   "metadata_sha256": "8a153e4dc2efefba4d7a80feb53a017bd5ffd74043dfd4f954cb306f835e39a9",
+  "payload_sha256": "002cb4561109627afa1ff56777934adb76c85a945ece0a611c1c8d0fffcc4843",
   "sha256": "d7014cd5a97040fe7ad8950c262c541e02fd80023d390c99f35c40f9e4100641",
   "version": "0.2.0",
   "wheel": "causal_debugger-0.2.0-py3-none-any.whl"

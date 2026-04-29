@@ -101,11 +101,13 @@ def venv_paths(data_dir: Path) -> tuple[Path, Path]:
 
 
 def is_install_current(data_dir: Path, manifest: dict) -> bool:
-    """True iff the installed venv matches the bundled wheel's metadata fingerprint.
+    """True iff the installed venv matches the bundled wheel's full fingerprint.
 
-    Both ``venv/bin/python`` and ``venv/bin/causal-debugger`` must exist —
-    Codex flagged that the doctor smoke test catches runtime errors but not a
-    missing console-script entry point.
+    Compares both ``metadata_sha256`` (catches dependency-graph changes) and
+    ``sha256`` (catches code-only changes that leave METADATA untouched). Both
+    ``venv/bin/python`` and ``venv/bin/causal-debugger`` must exist — Codex
+    flagged that the doctor smoke test catches runtime errors but not a missing
+    console-script entry point.
     """
     install_manifest = data_dir / "install_manifest.json"
     if not install_manifest.exists():
@@ -115,6 +117,8 @@ def is_install_current(data_dir: Path, manifest: dict) -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     if recorded.get("metadata_sha256") != manifest.get("metadata_sha256"):
+        return False
+    if recorded.get("sha256") != manifest.get("sha256"):
         return False
     python, cli = venv_paths(data_dir)
     return python.exists() and cli.exists()
@@ -280,10 +284,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"READY: causal-debugger {manifest['version']} already installed at {cli}")
             return 0
 
-        clear = has_partial_venv(data_dir)
-        if clear:
+        venv_dir = data_dir / "venv"
+        partial = has_partial_venv(data_dir)
+        stale = venv_dir.exists() and not partial
+        clear = partial or stale
+        if partial:
             print(
                 "bootstrap: detected partial venv (no install_manifest.json) — wiping",
+                file=sys.stderr,
+            )
+        elif stale:
+            print(
+                "bootstrap: existing venv does not match bundled wheel fingerprint — wiping",
                 file=sys.stderr,
             )
 
