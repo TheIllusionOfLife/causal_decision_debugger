@@ -137,24 +137,37 @@ def _install_attempts(wheel: Path) -> list[list[str]]:
     return attempts
 
 
-def _user_base_bin() -> Path:
-    """Where ``pip install --user`` puts console scripts.
+def _candidate_bin_dirs() -> list[Path]:
+    """Every directory the three install paths might drop the script into.
 
-    ``site.getuserbase()`` already encodes the platform-specific layout
-    (``~/Library/Python/X.Y`` on stock macOS, ``~/.local`` on Linux), so
-    delegating to it avoids a hand-rolled platform check.
+    - ``pip install --user`` puts it at ``site.getuserbase()/bin``: stock
+      macOS Python lands in ``~/Library/Python/X.Y/bin``, Linux in
+      ``~/.local/bin``.
+    - ``uv tool install`` and ``pipx install`` both default to
+      ``~/.local/bin`` on every platform (overridable via
+      ``UV_TOOL_BIN_DIR`` / ``PIPX_BIN_DIR``, but defaults cover the
+      common case).
+
+    On Linux these collapse to one path; on macOS they're two distinct
+    directories. The post-install error iterates both so the user sees the
+    one that actually applies to whichever installer succeeded.
     """
-    return Path(site.getuserbase()) / "bin"
+    pip_user_bin = Path(site.getuserbase()) / "bin"
+    uv_pipx_bin = Path.home() / ".local" / "bin"
+    return [pip_user_bin] if pip_user_bin == uv_pipx_bin else [pip_user_bin, uv_pipx_bin]
 
 
 def _post_install_check(expected_version: str) -> int:
     cli = shutil.which("causal-debugger")
     if cli is None:
-        bin_dir = _user_base_bin()
+        bin_dirs = _candidate_bin_dirs()
+        suggestions = "\n".join(f'  export PATH="{p}:$PATH"' for p in bin_dirs)
         return _die(
             "install reported success but `causal-debugger` is not on $PATH.\n"
-            f"It probably landed in {bin_dir}. Add this to your shell profile:\n"
-            f'  export PATH="{bin_dir}:$PATH"\n'
+            "It probably landed in one of these (uv/pipx default to ~/.local/bin; "
+            "pip --user uses site.getuserbase()/bin). Add the relevant one to your "
+            "shell profile:\n"
+            f"{suggestions}\n"
             "Then re-run this bootstrap."
         )
     cli, version, _ = _existing_install()
